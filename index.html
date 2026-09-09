@@ -101,6 +101,22 @@
     white-space:nowrap;
   }
   .month-pill .dot{ color:var(--accent); margin:0 6px; }
+  .month-nav{ display:flex; align-items:center; gap:8px; }
+  .month-btn{
+    width:32px; height:32px; border-radius:999px; border:1px solid var(--border); background:var(--surface);
+    color:var(--text); font-size:16px; line-height:1; cursor:pointer; box-shadow:var(--shadow);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .month-btn:hover{ background:var(--surface-alt); }
+
+  .due-chip{
+    display:inline-block; font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px;
+    background:var(--surface-alt); color:var(--text-muted); white-space:nowrap;
+  }
+  .due-chip.overdue{ background:var(--critical-soft); color:var(--critical); }
+  .due-chip.today{ background:var(--warning-soft); color:var(--warning); }
+  .chk-paid{ width:60px; }
+  .paid-date{ font-size:9.5px; color:var(--text-muted); margin-top:2px; white-space:nowrap; }
 
   .sync-pill{
     display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
@@ -292,7 +308,11 @@
       <p class="sub">Mensalidades de alunos e despesas do mês, com baixa em tempo real.</p>
       <span class="sync-pill" id="sync-pill"><span class="led"></span><span id="sync-label">Verificando conexão…</span></span>
     </div>
-    <div class="month-pill">Setembro <span class="dot">·</span> 2026</div>
+    <div class="month-nav">
+      <button class="month-btn" id="month-prev" type="button" aria-label="Mês anterior">‹</button>
+      <span class="month-pill" id="month-label">Setembro · 2026</span>
+      <button class="month-btn" id="month-next" type="button" aria-label="Próximo mês">›</button>
+    </div>
   </div>
 
   <div class="stat-grid">
@@ -341,7 +361,7 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Aluno</th><th class="num">Mensalidade</th><th class="chk">Pago</th><th class="chk"></th></tr>
+              <tr><th>Aluno</th><th class="num">Mensalidade</th><th class="chk chk-paid">Pago</th><th class="chk"></th></tr>
             </thead>
             <tbody id="students-body"><tr class="empty-row"><td colspan="4">Carregando alunos…</td></tr></tbody>
           </table>
@@ -388,9 +408,9 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th class="chk">Pago</th><th class="chk"></th></tr>
+              <tr><th>Descrição</th><th>Categoria</th><th>Vencimento</th><th class="num">Valor</th><th class="chk">Pago</th><th class="chk"></th></tr>
             </thead>
-            <tbody id="expenses-body"><tr class="empty-row"><td colspan="5">Carregando despesas…</td></tr></tbody>
+            <tbody id="expenses-body"><tr class="empty-row"><td colspan="6">Carregando despesas…</td></tr></tbody>
           </table>
         </div>
 
@@ -410,6 +430,7 @@
               <input id="e-cat" required placeholder="Ex.: Assinaturas" list="cat-list">
               <datalist id="cat-list"></datalist>
             </div>
+            <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="date" required></div>
             <div class="field"><label for="e-valor">Valor (R$)</label><input id="e-valor" type="number" step="0.01" min="0" required placeholder="60"></div>
           </div>
           <div class="actions">
@@ -428,12 +449,14 @@
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   fetchData, updateExpense, togglePaid, insertStudent,
-  insertExpense, deleteExpense, removeStudent, toggleStudentPaid, subscribeRealtime
+  insertExpense, deleteExpense, removeStudent, toggleStudentPaid,
+  cloneMonthIfEmpty, subscribeRealtime
 } from "./persistence.js";
 
-// Mês ativo do painel. Sem seletor de mês ainda — ajuste aqui a cada virada de mês.
-var MONTH = 9;
-var YEAR = 2026;
+var MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+var currentMonth = 9;
+var currentYear = 2026;
+var todayIso = new Date().toISOString().slice(0, 10);
 
 var state = { students: [], expenses: [], receitaManual: null };
 var syncTimers = {};
@@ -453,6 +476,18 @@ function escapeHtml(str){
 function trashIcon(){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>';
 }
+// yyyy-mm-dd -> dd/mm
+function formatShortDate(iso){
+  if(!iso) return "";
+  var parts = String(iso).split("-");
+  return parts.length < 3 ? iso : parts[2] + "/" + parts[1];
+}
+function dueStatus(e){
+  if(e.is_paid || !e.due_date) return "";
+  if(e.due_date < todayIso) return "overdue";
+  if(e.due_date === todayIso) return "today";
+  return "";
+}
 
 function render(){
   var sBody = document.getElementById("students-body");
@@ -460,7 +495,9 @@ function render(){
     return '<tr class="' + (s.paid ? "paid" : "") + '">' +
       '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong><span>' + escapeHtml(s.guardian_name) + '</span></td>' +
       '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
-      '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
+      '<td class="chk chk-paid"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga">' +
+        (s.paid && s.payment_date ? '<div class="paid-date">' + formatShortDate(s.payment_date) + '</div>' : '') +
+      '</td>' +
       '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
   }).join("") : '<tr class="empty-row"><td colspan="4">Nenhum aluno cadastrado ainda.</td></tr>';
@@ -468,14 +505,16 @@ function render(){
 
   var eBody = document.getElementById("expenses-body");
   eBody.innerHTML = state.expenses.length ? state.expenses.map(function(e){
+    var status = dueStatus(e);
     return '<tr class="' + (e.is_paid ? "paid" : "") + '">' +
       '<td class="desc">' + escapeHtml(e.description) + '</td>' +
       '<td><span class="cat-chip">' + escapeHtml(e.category) + '</span></td>' +
+      '<td>' + (e.due_date ? '<span class="due-chip' + (status ? " " + status : "") + '">' + formatShortDate(e.due_date) + '</span>' : '<span class="due-chip">—</span>') + '</td>' +
       '<td class="num"><span class="value-edit"><span>R$</span><input type="number" step="0.01" min="0" class="value-input" data-edit-expense="' + e.id + '" value="' + Number(e.amount).toFixed(2) + '" aria-label="Valor de ' + escapeHtml(e.description) + '"></span></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-expense="' + e.id + '" ' + (e.is_paid ? "checked" : "") + ' aria-label="Marcar ' + escapeHtml(e.description) + ' como pago"></td>' +
       '<td class="chk"><button class="row-del" data-remove-expense="' + e.id + '" aria-label="Remover ' + escapeHtml(e.description) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
-  }).join("") : '<tr class="empty-row"><td colspan="5">Nenhuma despesa cadastrada em Setembro/2026.</td></tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="6">Nenhuma despesa cadastrada em ' + MONTH_NAMES[currentMonth-1] + '/' + currentYear + '.</td></tr>';
   document.getElementById("despesas-count").textContent = state.expenses.length + (state.expenses.length === 1 ? " conta" : " contas");
 
   var cats = Array.from(new Set(state.expenses.map(function(e){ return e.category; })));
@@ -584,9 +623,10 @@ document.getElementById("students-body").addEventListener("change", function(ev)
   if(!id) return;
   var s = state.students.find(function(s){ return s.id === id; });
   if(!s) return;
-  s.paid = ev.target.checked; // otimista: reflete na tela na hora
+  s.paid = ev.target.checked;
+  s.payment_date = ev.target.checked ? todayIso : null; // registra a data do clique — sem input extra
   render();
-  toggleStudentPaid(id, ev.target.checked); // persiste — dispara o realtime para os outros dispositivos
+  toggleStudentPaid(id, ev.target.checked); // persiste (inclui payment_date) — dispara o realtime pros outros dispositivos
 });
 
 document.getElementById("receita-input").addEventListener("input", function(ev){
@@ -614,13 +654,13 @@ formStudent.addEventListener("submit", function(ev){
   var valor = parseFloat(document.getElementById("s-valor").value);
   if(!aluno || !resp || isNaN(valor)) return;
 
-  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true, paid: false });
+  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true, paid: false, payment_date: null, month: currentMonth, year: currentYear });
   state.receitaManual = null; // recalcula automaticamente
   formStudent.reset();
   formStudent.classList.remove("open");
   render();
 
-  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor });
+  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor, month: currentMonth, year: currentYear });
 });
 
 // ---- formulário: nova despesa ----
@@ -639,25 +679,54 @@ formExpense.addEventListener("submit", function(ev){
   ev.preventDefault();
   var desc = document.getElementById("e-desc").value.trim();
   var cat = document.getElementById("e-cat").value.trim();
+  var due = document.getElementById("e-due").value;
   var valor = parseFloat(document.getElementById("e-valor").value);
-  if(!desc || !cat || isNaN(valor)) return;
+  if(!desc || !cat || !due || isNaN(valor)) return;
 
-  state.expenses.push({ id: uid("tmp"), description: desc, category: cat, amount: valor, is_paid: false, month: MONTH, year: YEAR });
+  state.expenses.push({ id: uid("tmp"), description: desc, category: cat, amount: valor, is_paid: false, due_date: due, month: currentMonth, year: currentYear });
   formExpense.reset();
   formExpense.classList.remove("open");
   render();
 
-  insertExpense({ description: desc, category: cat, amount: valor, month: MONTH, year: YEAR });
+  insertExpense({ description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear });
 });
 
-// ---- carga inicial + sincronização em tempo real ----
+// ---- navegação de mês + sincronização em tempo real ----
 
-async function loadAndRender(){
-  var data = await fetchData(MONTH, YEAR);
+function monthLabel(){ return MONTH_NAMES[currentMonth - 1] + " · " + currentYear; }
+
+function showLoading(){
+  document.getElementById("students-body").innerHTML = '<tr class="empty-row"><td colspan="4">Carregando alunos…</td></tr>';
+  document.getElementById("expenses-body").innerHTML = '<tr class="empty-row"><td colspan="6">Carregando despesas…</td></tr>';
+}
+
+// Troca o mês ativo. Se o mês de destino ainda não tiver dados, clona alunos e
+// despesas do mês anterior (com o status "Pago" zerado) antes de exibir.
+async function goToMonth(month, year){
+  currentMonth = month;
+  currentYear = year;
+  document.getElementById("month-label").textContent = monthLabel();
+  todayIso = new Date().toISOString().slice(0, 10);
+  showLoading();
+
+  var prevMonth = month === 1 ? 12 : month - 1;
+  var prevYear = month === 1 ? year - 1 : year;
+  var data = await cloneMonthIfEmpty(prevMonth, prevYear, month, year);
   state.students = data.students || [];
   state.expenses = data.expenses || [];
   render();
 }
+
+document.getElementById("month-prev").addEventListener("click", function(){
+  var m = currentMonth - 1, y = currentYear;
+  if(m < 1){ m = 12; y -= 1; }
+  goToMonth(m, y);
+});
+document.getElementById("month-next").addEventListener("click", function(){
+  var m = currentMonth + 1, y = currentYear;
+  if(m > 12){ m = 1; y += 1; }
+  goToMonth(m, y);
+});
 
 var syncPill = document.getElementById("sync-pill");
 var syncLabel = document.getElementById("sync-label");
@@ -672,10 +741,15 @@ if(isSupabaseEnabled){
   footerNote.textContent = "Supabase não configurado — os dados ficam salvos só neste navegador.";
 }
 
-loadAndRender();
+goToMonth(currentMonth, currentYear);
 
 subscribeRealtime(function(){
-  loadAndRender(); // outro dispositivo mudou algo (pagou conta, editou valor, novo aluno) — rebusca e redesenha
+  // outro dispositivo mudou algo (pagou conta, editou valor, novo aluno) — rebusca o mês atual e redesenha
+  fetchData(currentMonth, currentYear).then(function(data){
+    state.students = data.students || [];
+    state.expenses = data.expenses || [];
+    render();
+  });
 });
 </script>
 </body>

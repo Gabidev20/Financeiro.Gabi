@@ -7,6 +7,7 @@ create table if not exists public.expenses (
   category    text not null,
   amount      numeric(10,2) not null default 0,
   is_paid     boolean not null default false,
+  due_date    date,                   -- vencimento da conta
   month       smallint not null,      -- 1-12
   year        smallint not null,      -- ex.: 2026
   created_at  timestamptz not null default now()
@@ -18,12 +19,23 @@ create table if not exists public.students (
   guardian_name text not null,
   monthly_fee   numeric(10,2) not null default 0,
   active        boolean not null default true,
-  paid          boolean not null default false,  -- mensalidade do mês corrente paga? (sem histórico por mês ainda)
+  paid          boolean not null default false,
+  payment_date  date,                 -- dia em que a mensalidade foi recebida
+  month         smallint not null,    -- alunos agora são por mês/ano, para o "Pago" zerar a cada mês novo
+  year          smallint not null,
   created_at    timestamptz not null default now()
 );
 
--- Se a tabela students já existia antes desta coluna ser adicionada, rode:
--- alter table public.students add column if not exists paid boolean not null default false;
+-- MIGRAÇÃO — rode isto se as tabelas expenses/students já existiam antes desta versão:
+alter table public.expenses add column if not exists due_date date;
+alter table public.students add column if not exists paid boolean not null default false;
+alter table public.students add column if not exists payment_date date;
+alter table public.students add column if not exists month smallint;
+alter table public.students add column if not exists year smallint;
+-- Alunos que já existiam (sem month/year) pertencem ao mês ativo atual — ajuste se for outro:
+update public.students set month = 9, year = 2026 where month is null;
+alter table public.students alter column month set not null;
+alter table public.students alter column year set not null;
 
 -- Habilita o realtime (necessário para o supabase.channel().on('postgres_changes', ...) funcionar)
 alter publication supabase_realtime add table public.expenses;
