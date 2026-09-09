@@ -2,10 +2,18 @@
 // Camada de dados: lê/escreve no Supabase quando configurado, senão usa o
 // mesmo localStorage já usado pelo painel (chave "painel-gabi-v1").
 //
+// Toda operação contra o Supabase é envolvida em try/catch e loga o erro
+// completo (message/code/details/hint do Postgres — o que costuma apontar
+// direto pra causa: RLS, coluna errada, tipo errado) — nada falha em
+// silêncio. Toda escrita devolve o que realmente foi confirmado pelo banco
+// (a linha com o id gerado, ou true/false), para a UI nunca depender de um
+// id temporário local ou assumir sucesso sem checar.
+//
 // Modelo:
 // - students: cadastro global de alunos — não muda de mês.
 // - student_payments: status de pagamento por aluno/mês/ano (1 linha por combinação).
-// - expenses: despesas por mês/ano — a base é clonada do mês anterior quando o mês novo está vazio.
+// - expenses: despesas por mês/ano — o modelo base (fixas + variáveis) é
+//   inserido automaticamente na primeira visita a um mês vazio.
 
 import { supabase, isSupabaseEnabled } from "./supabaseClient.js";
 
@@ -28,6 +36,9 @@ function upsertLocalPayment(state, studentId, month, year, patch) {
   Object.assign(p, patch);
   return p;
 }
+function logSupabaseError(op, payload, error) {
+  console.error("[persistence] " + op + " falhou — confira RLS/schema no Supabase", { payload, error });
+}
 
 // ---- alunos (cadastro global) ----
 
@@ -35,27 +46,35 @@ async function fetchActiveStudents() {
   if (!isSupabaseEnabled) {
     return (readLocal().students || []).filter((s) => s.active !== false);
   }
-  const { data, error } = await supabase.from("students").select("*").eq("active", true).order("created_at");
-  if (error) { console.error(error); return []; }
-  return data;
+  try {
+    const { data, error } = await supabase.from("students").select("*").eq("active", true).order("created_at");
+    if (error) { logSupabaseError("fetchActiveStudents", null, error); return []; }
+    return data || [];
+  } catch (err) {
+    logSupabaseError("fetchActiveStudents", null, err);
+    return [];
+  }
 }
 
-// Insere um novo aluno no cadastro global (usado pelo formulário "+ Novo aluno").
+// Insere um novo aluno no cadastro global. Devolve a linha salva (com o id
+// real do Supabase) ou null se a gravação falhar.
 export async function insertStudent({ studentName, guardianName, monthlyFee }) {
+  const payload = { student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee, active: true };
   if (!isSupabaseEnabled) {
+    const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
-    state.students.push({
-      id: crypto.randomUUID(),
-      student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee,
-      active: true,
-    });
+    state.students.push(row);
     writeLocal(state);
-    return;
+    return row;
   }
-  const { error } = await supabase.from("students").insert({
-    student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee, active: true,
-  });
-  if (error) console.error(error);
+  try {
+    const { data, error } = await supabase.from("students").insert(payload).select().single();
+    if (error) { logSupabaseError("insertStudent", payload, error); return null; }
+    return data;
+  } catch (err) {
+    logSupabaseError("insertStudent", payload, err);
+    return null;
+  }
 }
 
 // "Remove" um aluno via soft-delete (active = false) — some de todos os meses.
@@ -64,10 +83,16 @@ export async function removeStudent(id) {
     const state = readLocal();
     state.students = state.students.filter((s) => s.id !== id);
     writeLocal(state);
-    return;
+    return true;
   }
-  const { error } = await supabase.from("students").update({ active: false }).eq("id", id);
-  if (error) console.error(error);
+  try {
+    const { error } = await supabase.from("students").update({ active: false }).eq("id", id);
+    if (error) { logSupabaseError("removeStudent", { id }, error); return false; }
+    return true;
+  } catch (err) {
+    logSupabaseError("removeStudent", { id }, err);
+    return false;
+  }
 }
 
 // ---- pagamento dos alunos, por mês/ano ----
@@ -76,43 +101,49 @@ async function fetchPayments(month, year) {
   if (!isSupabaseEnabled) {
     return (readLocal().payments || []).filter((p) => p.month === month && p.year === year);
   }
-  const { data, error } = await supabase.from("student_payments").select("*").eq("month", month).eq("year", year);
-  if (error) { console.error(error); return []; }
-  return data;
+  try {
+    const { data, error } = await supabase.from("student_payments").select("*").eq("month", month).eq("year", year);
+    if (error) { logSupabaseError("fetchPayments", { month, year }, error); return []; }
+    return data || [];
+  } catch (err) {
+    logSupabaseError("fetchPayments", { month, year }, err);
+    return [];
+  }
 }
 
-// Define o status de pagamento de um aluno neste mês/ano — usada tanto pelo
-// checkbox "Pago" quanto pela edição direta do campo de data (digitar um dia
-// também marca como pago; limpar o campo desmarca). Sem data explícita e
-// isPaid=true, usa hoje.
+// Define o status de pagamento de um aluno neste mês/ano (checkbox "Pago" ou
+// edição direta da data). Devolve true se o Supabase confirmou a gravação.
 export async function setStudentPayment(studentId, month, year, isPaid, paymentDate) {
   const finalDate = isPaid ? (paymentDate || new Date().toISOString().slice(0, 10)) : null;
+  const payload = { student_id: studentId, month, year, is_paid: isPaid, payment_date: finalDate };
   if (!isSupabaseEnabled) {
     const state = readLocal();
     upsertLocalPayment(state, studentId, month, year, { is_paid: isPaid, payment_date: finalDate });
     writeLocal(state);
-    return;
+    return true;
   }
-  const { error } = await supabase
-    .from("student_payments")
-    .upsert({ student_id: studentId, month, year, is_paid: isPaid, payment_date: finalDate }, { onConflict: "student_id,month,year" });
-  if (error) console.error(error);
+  try {
+    const { error } = await supabase
+      .from("student_payments")
+      .upsert(payload, { onConflict: "student_id,month,year" });
+    if (error) { logSupabaseError("setStudentPayment", payload, error); return false; }
+    return true;
+  } catch (err) {
+    logSupabaseError("setStudentPayment", payload, err);
+    return false;
+  }
 }
 
-// ---- despesas (por mês/ano, com auto-população das contas fixas) ----
+// ---- despesas (por mês/ano, com auto-população do modelo base) ----
 
 // Modelo base do mês: entra sozinho em todo mês novo (sem nenhuma despesa
 // ainda), com "Pago" zerado. As fixas já vêm com o valor de sempre; as
-// variáveis entram com R$ 0,00, prontas para editar o valor daquele mês
-// (a edição inline já existente cuida disso — nenhuma linha nova de código
-// de UI é necessária para isso).
+// variáveis entram com R$ 0,00, prontas para editar o valor daquele mês.
 const BASE_EXPENSES = [
-  // fixas — valor de sempre
   { description: "Das - empresa",    category: "Empresa",     amount: 87.05 },
   { description: "Crédito",          category: "Celular",     amount: 30.00 },
   { description: "Lavagem de roupa", category: "Serviços",    amount: 80.00 },
   { description: "Tv - parcela",     category: "Assinaturas", amount: 60.00 },
-  // variáveis — recorrentes todo mês, mas o valor muda; entram zeradas
   { description: "Cartão de crédito", category: "Cartão",  amount: 0 },
   { description: "Aluguel das casas", category: "Moradia", amount: 0 },
   { description: "Gastos extras",     category: "Extras",  amount: 0 },
@@ -122,38 +153,70 @@ async function fetchExpenses(month, year) {
   if (!isSupabaseEnabled) {
     return (readLocal().expenses || []).filter((e) => e.month === month && e.year === year);
   }
-  const { data, error } = await supabase.from("expenses").select("*").eq("month", month).eq("year", year).order("created_at");
-  if (error) { console.error(error); return []; }
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from("expenses")
+      .select("*")
+      .eq("month", month)
+      .eq("year", year)
+      .order("created_at", { ascending: true });
+    if (error) { logSupabaseError("fetchExpenses", { month, year }, error); return []; }
+    return data || [];
+  } catch (err) {
+    logSupabaseError("fetchExpenses", { month, year }, err);
+    return [];
+  }
 }
 
+// Atualiza campos de uma despesa pelo id real do Supabase (nunca por índice
+// de array). Devolve true só se o Supabase confirmou ter alterado a linha —
+// zero linhas afetadas sem erro geralmente é RLS bloqueando ou id errado.
 export async function updateExpense(id, patch) {
   if (!isSupabaseEnabled) {
     const state = readLocal();
     const exp = state.expenses.find((e) => e.id === id);
     if (exp) Object.assign(exp, patch);
     writeLocal(state);
-    return;
+    return true;
   }
-  const { error } = await supabase.from("expenses").update(patch).eq("id", id);
-  if (error) console.error(error);
+  try {
+    const { data, error } = await supabase.from("expenses").update(patch).eq("id", id).select();
+    if (error) { logSupabaseError("updateExpense", { id, patch }, error); return false; }
+    if (!data || !data.length) {
+      console.warn("[persistence] updateExpense não alterou nenhuma linha (id inexistente ou bloqueado por RLS)", { id, patch });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logSupabaseError("updateExpense", { id, patch }, err);
+    return false;
+  }
 }
 
 export async function togglePaid(id, isPaid) {
   return updateExpense(id, { is_paid: isPaid });
 }
 
+// Insere uma despesa nova. Devolve a linha salva (com o id real do Supabase)
+// ou null se a gravação falhar — a UI deve tratar null como erro visível,
+// nunca manter a linha só no estado local.
 export async function insertExpense({ description, category, amount, dueDate, month, year }) {
+  const payload = { description, category, amount, due_date: dueDate || null, is_paid: false, month, year };
   if (!isSupabaseEnabled) {
+    const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
-    state.expenses.push({ id: crypto.randomUUID(), description, category, amount, due_date: dueDate || null, is_paid: false, month, year });
+    state.expenses.push(row);
     writeLocal(state);
-    return;
+    return row;
   }
-  const { error } = await supabase
-    .from("expenses")
-    .insert({ description, category, amount, due_date: dueDate || null, is_paid: false, month, year });
-  if (error) console.error(error);
+  try {
+    const { data, error } = await supabase.from("expenses").insert(payload).select().single();
+    if (error) { logSupabaseError("insertExpense", payload, error); return null; }
+    return data;
+  } catch (err) {
+    logSupabaseError("insertExpense", payload, err);
+    return null;
+  }
 }
 
 export async function deleteExpense(id) {
@@ -161,15 +224,22 @@ export async function deleteExpense(id) {
     const state = readLocal();
     state.expenses = state.expenses.filter((e) => e.id !== id);
     writeLocal(state);
-    return;
+    return true;
   }
-  const { error } = await supabase.from("expenses").delete().eq("id", id);
-  if (error) console.error(error);
+  try {
+    const { error } = await supabase.from("expenses").delete().eq("id", id);
+    if (error) { logSupabaseError("deleteExpense", { id }, error); return false; }
+    return true;
+  } catch (err) {
+    logSupabaseError("deleteExpense", { id }, err);
+    return false;
+  }
 }
 
 // Se o mês/ano informado ainda não tiver nenhuma despesa, insere o modelo
-// base completo (BASE_EXPENSES — fixas + variáveis zeradas) em lote e devolve
-// a lista já atualizada. Se já houver despesas, não mexe em nada.
+// base completo (BASE_EXPENSES) em UM insert em lote e devolve as linhas já
+// com o id real gerado pelo Supabase. Se a inserção falhar, loga o erro em
+// detalhe e devolve [] (a tela mostra "nenhuma despesa" em vez de fantasmas).
 async function seedBaseExpensesIfEmpty(month, year) {
   const current = await fetchExpenses(month, year);
   if (current.length) return current;
@@ -177,15 +247,21 @@ async function seedBaseExpensesIfEmpty(month, year) {
   const toInsert = BASE_EXPENSES.map((e) => ({ ...e, due_date: null, is_paid: false, month, year }));
 
   if (!isSupabaseEnabled) {
+    const rows = toInsert.map((e) => ({ id: crypto.randomUUID(), ...e }));
     const state = readLocal();
-    state.expenses = (state.expenses || []).concat(toInsert.map((e) => ({ id: crypto.randomUUID(), ...e })));
+    state.expenses = (state.expenses || []).concat(rows);
     writeLocal(state);
-    return fetchExpenses(month, year);
+    return rows;
   }
 
-  const { error } = await supabase.from("expenses").insert(toInsert);
-  if (error) console.error(error);
-  return fetchExpenses(month, year);
+  try {
+    const { data, error } = await supabase.from("expenses").insert(toInsert).select();
+    if (error) { logSupabaseError("seedBaseExpensesIfEmpty", { month, year, toInsert }, error); return []; }
+    return data || [];
+  } catch (err) {
+    logSupabaseError("seedBaseExpensesIfEmpty", { month, year, toInsert }, err);
+    return [];
+  }
 }
 
 // ---- carregamento do mês ativo ----
@@ -193,7 +269,8 @@ async function seedBaseExpensesIfEmpty(month, year) {
 // Chamada ao trocar de mês, ao carregar a página, e a cada evento realtime:
 // - os alunos ativos são sempre os mesmos, em qualquer mês (cadastro global);
 // - o status de pagamento de cada aluno vem de student_payments, filtrado por month/year;
-// - despesas: se o mês estiver vazio, o modelo base completo (BASE_EXPENSES) é inserido em lote.
+// - despesas: se o mês estiver vazio, o modelo base completo é inserido em lote e a lista
+//   devolvida já vem com os ids reais do Supabase.
 export async function loadMonthData(month, year) {
   const [students, payments] = await Promise.all([fetchActiveStudents(), fetchPayments(month, year)]);
 
@@ -214,7 +291,8 @@ export async function loadMonthData(month, year) {
 
 // Assina mudanças em tempo real (outro dispositivo pagou uma conta, marcou um
 // aluno como pago, editou um valor etc.) e chama onChange para o app rebuscar
-// o mês em exibição e redesenhar.
+// o mês em exibição e redesenhar. Loga se a própria assinatura falhar (ex.:
+// tabela não incluída na publication supabase_realtime).
 export function subscribeRealtime(onChange) {
   if (!isSupabaseEnabled) return () => {};
 
@@ -223,7 +301,9 @@ export function subscribeRealtime(onChange) {
     .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "students" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "student_payments" }, onChange)
-    .subscribe();
+    .subscribe((status, err) => {
+      if (err) console.error("[persistence] falha ao assinar o realtime", err);
+    });
 
   return () => supabase.removeChannel(channel);
 }

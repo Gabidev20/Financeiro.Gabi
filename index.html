@@ -283,6 +283,14 @@
     text-align:center; color:var(--text-muted); font-size:12px; margin-top:28px;
   }
 
+  .error-toast{
+    position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+    max-width:min(92vw, 420px); background:var(--critical-soft); color:var(--critical);
+    border:1px solid var(--critical); border-radius:10px; padding:10px 16px;
+    font-size:13px; font-weight:600; box-shadow:var(--shadow); z-index:50;
+  }
+  .field-error{ color:var(--critical); font-size:12px; font-weight:600; margin-top:2px; }
+
   @media (max-width: 900px){
     .grid{ grid-template-columns:1fr; }
     .stat-grid{ grid-template-columns:repeat(2, 1fr); }
@@ -446,6 +454,8 @@
   <footer class="note" id="footer-note">Conectando ao Supabase…</footer>
 </div>
 
+<div class="error-toast" id="error-toast" hidden></div>
+
 <script type="module">
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
@@ -464,7 +474,14 @@ var syncTimers = {};
 function brl(n){
   return (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
-function uid(prefix){ return prefix + "_" + Math.random().toString(36).slice(2, 9); }
+var errorToastTimer;
+function showError(message){
+  var el = document.getElementById("error-toast");
+  el.textContent = message;
+  el.hidden = false;
+  clearTimeout(errorToastTimer);
+  errorToastTimer = setTimeout(function(){ el.hidden = true; }, 6000);
+}
 function sumStudents(){
   return state.students.reduce(function(acc, s){ return acc + Number(s.monthly_fee || 0); }, 0);
 }
@@ -581,7 +598,11 @@ document.getElementById("expenses-body").addEventListener("input", function(ev){
   updateTotals(); // reflexo imediato na tela
 
   clearTimeout(syncTimers[id]);
-  syncTimers[id] = setTimeout(function(){ updateExpense(id, { amount: exp.amount }); }, 500); // debounce: não bate no banco a cada tecla
+  syncTimers[id] = setTimeout(function(){
+    updateExpense(id, { amount: exp.amount }).then(function(ok){
+      if(!ok) showError('Não foi possível salvar o valor de "' + exp.description + '". Veja o console (F12) para detalhes.');
+    });
+  }, 500); // debounce: não bate no banco a cada tecla
 });
 
 document.getElementById("expenses-body").addEventListener("change", function(ev){
@@ -589,9 +610,16 @@ document.getElementById("expenses-body").addEventListener("change", function(ev)
   if(toggleId){
     var exp = state.expenses.find(function(e){ return e.id === toggleId; });
     if(exp){
+      var wasPaid = exp.is_paid;
       exp.is_paid = ev.target.checked; // otimista: atualiza a tela na hora
       updateTotals();
-      togglePaid(toggleId, ev.target.checked); // persiste — dispara o realtime para os outros dispositivos
+      togglePaid(toggleId, ev.target.checked).then(function(ok){
+        if(!ok){
+          exp.is_paid = wasPaid; // reverte — não persistiu de verdade
+          render();
+          showError('Não foi possível marcar "' + exp.description + '" como pago. Veja o console (F12) para detalhes.');
+        }
+      });
     }
     return;
   }
@@ -600,7 +628,9 @@ document.getElementById("expenses-body").addEventListener("change", function(ev)
     var e2 = state.expenses.find(function(e){ return e.id === editId; });
     if(e2){
       clearTimeout(syncTimers[editId]);
-      updateExpense(editId, { amount: e2.amount }); // garante que o valor final seja salvo ao sair do campo
+      updateExpense(editId, { amount: e2.amount }).then(function(ok){ // garante que o valor final seja salvo ao sair do campo
+        if(!ok) showError('Não foi possível salvar o valor de "' + e2.description + '". Veja o console (F12) para detalhes.');
+      });
       ev.target.value = Number(e2.amount).toFixed(2);
     }
     return;
@@ -614,14 +644,18 @@ document.getElementById("expenses-body").addEventListener("change", function(ev)
     if(!typed){
       e3.due_date = null;
       render();
-      updateExpense(dueId, { due_date: null });
+      updateExpense(dueId, { due_date: null }).then(function(ok){
+        if(!ok) showError('Não foi possível salvar o vencimento de "' + e3.description + '". Veja o console (F12) para detalhes.');
+      });
       return;
     }
     var isoDue = parseDayFromInput(typed, currentMonth, currentYear); // ignora o mês digitado — sempre usa o mês/ano ativo
     if(!isoDue){ ev.target.value = e3.due_date ? formatShortDate(e3.due_date) : ""; return; }
     e3.due_date = isoDue;
     render();
-    updateExpense(dueId, { due_date: isoDue });
+    updateExpense(dueId, { due_date: isoDue }).then(function(ok){
+      if(!ok) showError('Não foi possível salvar o vencimento de "' + e3.description + '". Veja o console (F12) para detalhes.');
+    });
   }
 });
 
@@ -633,9 +667,17 @@ document.getElementById("expenses-body").addEventListener("click", function(ev){
   var btn = ev.target.closest("[data-remove-expense]");
   if(!btn) return;
   var id = btn.getAttribute("data-remove-expense");
+  var removed = state.expenses.find(function(e){ return e.id === id; });
+  var removedIndex = state.expenses.indexOf(removed);
   state.expenses = state.expenses.filter(function(e){ return e.id !== id; });
   render();
-  deleteExpense(id);
+  deleteExpense(id).then(function(ok){
+    if(!ok && removed){
+      state.expenses.splice(removedIndex, 0, removed); // devolve a linha — não foi excluída de verdade
+      render();
+      showError('Não foi possível excluir "' + removed.description + '". Veja o console (F12) para detalhes.');
+    }
+  });
 });
 
 // ---- eventos: alunos ----
@@ -644,10 +686,18 @@ document.getElementById("students-body").addEventListener("click", function(ev){
   var btn = ev.target.closest("[data-remove-student]");
   if(!btn) return;
   var id = btn.getAttribute("data-remove-student");
+  var removed = state.students.find(function(s){ return s.id === id; });
   state.students = state.students.filter(function(s){ return s.id !== id; });
   state.receitaManual = null;
   render();
-  removeStudent(id);
+  removeStudent(id).then(function(ok){
+    if(!ok && removed){
+      state.students.push(removed);
+      state.receitaManual = null;
+      render();
+      showError('Não foi possível remover "' + removed.student_name + '". Veja o console (F12) para detalhes.');
+    }
+  });
 });
 
 document.getElementById("students-body").addEventListener("change", function(ev){
@@ -655,10 +705,17 @@ document.getElementById("students-body").addEventListener("change", function(ev)
   if(toggleId){
     var s = state.students.find(function(s){ return s.id === toggleId; });
     if(s){
+      var wasPaid = s.is_paid, wasDate = s.payment_date;
       s.is_paid = ev.target.checked;
       s.payment_date = ev.target.checked ? todayIso : null; // sugere hoje; o campo Data pgto permite corrigir o dia
       render();
-      setStudentPayment(toggleId, currentMonth, currentYear, ev.target.checked); // persiste — dispara o realtime pros outros dispositivos
+      setStudentPayment(toggleId, currentMonth, currentYear, ev.target.checked).then(function(ok){
+        if(!ok){
+          s.is_paid = wasPaid; s.payment_date = wasDate; // reverte
+          render();
+          showError('Não foi possível salvar o pagamento de "' + s.student_name + '". Veja o console (F12) para detalhes.');
+        }
+      });
     }
     return;
   }
@@ -673,7 +730,9 @@ document.getElementById("students-body").addEventListener("change", function(ev)
       s2.is_paid = false;
       s2.payment_date = null;
       render();
-      setStudentPayment(dateId, currentMonth, currentYear, false);
+      setStudentPayment(dateId, currentMonth, currentYear, false).then(function(ok){
+        if(!ok) showError('Não foi possível salvar o pagamento de "' + s2.student_name + '". Veja o console (F12) para detalhes.');
+      });
       return;
     }
     var iso = parseDayFromInput(typed, currentMonth, currentYear); // ignora o mês digitado — sempre usa o mês ativo do painel
@@ -681,7 +740,9 @@ document.getElementById("students-body").addEventListener("change", function(ev)
     s2.is_paid = true;
     s2.payment_date = iso;
     render();
-    setStudentPayment(dateId, currentMonth, currentYear, true, iso);
+    setStudentPayment(dateId, currentMonth, currentYear, true, iso).then(function(ok){
+      if(!ok) showError('Não foi possível salvar o pagamento de "' + s2.student_name + '". Veja o console (F12) para detalhes.');
+    });
   }
 });
 
@@ -714,13 +775,22 @@ formStudent.addEventListener("submit", function(ev){
   var valor = parseFloat(document.getElementById("s-valor").value);
   if(!aluno || !resp || isNaN(valor)) return;
 
-  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true, is_paid: false, payment_date: null });
-  state.receitaManual = null; // recalcula automaticamente
-  formStudent.reset();
-  formStudent.classList.remove("open");
-  render();
-
-  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor });
+  // Espera a confirmação do Supabase antes de mostrar o aluno na tela — nada
+  // de id temporário: a linha só entra no estado com o id real do banco.
+  var submitBtn = formStudent.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor }).then(function(row){
+    submitBtn.disabled = false;
+    if(!row){
+      showError('Não foi possível salvar o aluno "' + aluno + '". Veja o console (F12) para detalhes.');
+      return; // mantém o formulário aberto com os dados preenchidos
+    }
+    state.students.push({ id: row.id, student_name: row.student_name, guardian_name: row.guardian_name, monthly_fee: row.monthly_fee, active: row.active, is_paid: false, payment_date: null });
+    state.receitaManual = null; // recalcula automaticamente
+    formStudent.reset();
+    formStudent.classList.remove("open");
+    render();
+  });
 });
 
 // ---- formulário: nova despesa ----
@@ -744,12 +814,21 @@ formExpense.addEventListener("submit", function(ev){
   var due = dueTyped ? parseDayFromInput(dueTyped, currentMonth, currentYear) : null; // dia digitado + mês/ano ativo do painel
   if(!desc || !cat || !due || isNaN(valor)) return;
 
-  state.expenses.push({ id: uid("tmp"), description: desc, category: cat, amount: valor, is_paid: false, due_date: due, month: currentMonth, year: currentYear });
-  formExpense.reset();
-  formExpense.classList.remove("open");
-  render();
-
-  insertExpense({ description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear });
+  // Espera a confirmação do Supabase antes de mostrar a despesa na tela —
+  // nada de id temporário: a linha só entra no estado com o id real do banco.
+  var submitBtn = formExpense.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  insertExpense({ description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear }).then(function(row){
+    submitBtn.disabled = false;
+    if(!row){
+      showError('Não foi possível salvar a despesa "' + desc + '". Veja o console (F12) para detalhes.');
+      return; // mantém o formulário aberto com os dados preenchidos
+    }
+    state.expenses.push(row);
+    formExpense.reset();
+    formExpense.classList.remove("open");
+    render();
+  });
 });
 
 // ---- navegação de mês + sincronização em tempo real ----
@@ -763,7 +842,8 @@ function showLoading(){
 
 // Troca o mês ativo: os alunos ativos vêm do cadastro global (sempre os
 // mesmos), o status de pagamento é buscado só para este mês/ano, e as
-// despesas são clonadas da base do mês anterior se o mês novo estiver vazio.
+// despesas recebem o modelo base automaticamente se o mês novo estiver vazio
+// (loadMonthData/persistence.js já loga qualquer erro do Supabase no console).
 async function goToMonth(month, year){
   currentMonth = month;
   currentYear = year;
@@ -771,10 +851,15 @@ async function goToMonth(month, year){
   todayIso = new Date().toISOString().slice(0, 10);
   showLoading();
 
-  var data = await loadMonthData(month, year);
-  state.students = data.students || [];
-  state.expenses = data.expenses || [];
-  render();
+  try{
+    var data = await loadMonthData(month, year);
+    state.students = data.students || [];
+    state.expenses = data.expenses || [];
+    render();
+  }catch(err){
+    console.error("[painel] falha inesperada ao carregar o mês", err);
+    showError("Não foi possível carregar " + monthLabel() + ". Veja o console (F12) para detalhes.");
+  }
 }
 
 document.getElementById("month-prev").addEventListener("click", function(){
