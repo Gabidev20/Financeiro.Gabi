@@ -99,7 +99,24 @@ export async function setStudentPayment(studentId, month, year, isPaid, paymentD
   if (error) console.error(error);
 }
 
-// ---- despesas (por mês/ano, com clonagem da base do mês anterior) ----
+// ---- despesas (por mês/ano, com auto-população das contas fixas) ----
+
+// Modelo base do mês: entra sozinho em todo mês novo (sem nenhuma despesa
+// ainda), com "Pago" zerado. As fixas já vêm com o valor de sempre; as
+// variáveis entram com R$ 0,00, prontas para editar o valor daquele mês
+// (a edição inline já existente cuida disso — nenhuma linha nova de código
+// de UI é necessária para isso).
+const BASE_EXPENSES = [
+  // fixas — valor de sempre
+  { description: "Das - empresa",    category: "Empresa",     amount: 87.05 },
+  { description: "Crédito",          category: "Celular",     amount: 30.00 },
+  { description: "Lavagem de roupa", category: "Serviços",    amount: 80.00 },
+  { description: "Tv - parcela",     category: "Assinaturas", amount: 60.00 },
+  // variáveis — recorrentes todo mês, mas o valor muda; entram zeradas
+  { description: "Cartão de crédito", category: "Cartão",  amount: 0 },
+  { description: "Aluguel das casas", category: "Moradia", amount: 0 },
+  { description: "Gastos extras",     category: "Extras",  amount: 0 },
+];
 
 async function fetchExpenses(month, year) {
   if (!isSupabaseEnabled) {
@@ -150,52 +167,33 @@ export async function deleteExpense(id) {
   if (error) console.error(error);
 }
 
-// Move um dia de vencimento para outro mês/ano, ajustando para o último dia
-// do mês se ele for mais curto (ex.: dia 31 clonado para um mês de 30 dias).
-function shiftDueDate(dueDate, toMonth, toYear) {
-  if (!dueDate) return null;
-  const day = Number(String(dueDate).split("-")[2]);
-  const lastDay = new Date(toYear, toMonth, 0).getDate();
-  return toYear + "-" + String(toMonth).padStart(2, "0") + "-" + String(Math.min(day, lastDay)).padStart(2, "0");
-}
-
-// Se o mês de destino ainda não tiver despesas, clona a base do mês anterior
-// (descrição, categoria, valor, vencimento ajustado) com "Pago" zerado.
-async function cloneExpensesIfEmpty(fromMonth, fromYear, toMonth, toYear) {
-  const current = await fetchExpenses(toMonth, toYear);
+// Se o mês/ano informado ainda não tiver nenhuma despesa, insere o modelo
+// base completo (BASE_EXPENSES — fixas + variáveis zeradas) em lote e devolve
+// a lista já atualizada. Se já houver despesas, não mexe em nada.
+async function seedBaseExpensesIfEmpty(month, year) {
+  const current = await fetchExpenses(month, year);
   if (current.length) return current;
 
-  const source = await fetchExpenses(fromMonth, fromYear);
-  if (!source.length) return current;
-
-  const toInsert = source.map((e) => ({
-    description: e.description,
-    category: e.category,
-    amount: e.amount,
-    due_date: shiftDueDate(e.due_date, toMonth, toYear),
-    is_paid: false,
-    month: toMonth,
-    year: toYear,
-  }));
+  const toInsert = BASE_EXPENSES.map((e) => ({ ...e, due_date: null, is_paid: false, month, year }));
 
   if (!isSupabaseEnabled) {
     const state = readLocal();
     state.expenses = (state.expenses || []).concat(toInsert.map((e) => ({ id: crypto.randomUUID(), ...e })));
     writeLocal(state);
-    return fetchExpenses(toMonth, toYear);
+    return fetchExpenses(month, year);
   }
 
   const { error } = await supabase.from("expenses").insert(toInsert);
   if (error) console.error(error);
-  return fetchExpenses(toMonth, toYear);
+  return fetchExpenses(month, year);
 }
 
 // ---- carregamento do mês ativo ----
 
 // Chamada ao trocar de mês, ao carregar a página, e a cada evento realtime:
-// - os alunos ativos são sempre os mesmos, em qualquer mês (não são clonados);
+// - os alunos ativos são sempre os mesmos, em qualquer mês (cadastro global);
 // - o status de pagamento de cada aluno vem de student_payments, filtrado por month/year;
-// - despesas são clonadas da base do mês anterior na primeira visita a um mês novo.
+// - despesas: se o mês estiver vazio, o modelo base completo (BASE_EXPENSES) é inserido em lote.
 export async function loadMonthData(month, year) {
   const [students, payments] = await Promise.all([fetchActiveStudents(), fetchPayments(month, year)]);
 
@@ -207,9 +205,7 @@ export async function loadMonthData(month, year) {
     return { ...s, is_paid: p ? p.is_paid : false, payment_date: p ? p.payment_date : null };
   });
 
-  const prevMonth = month === 1 ? 12 : month - 1;
-  const prevYear = month === 1 ? year - 1 : year;
-  const expenses = await cloneExpensesIfEmpty(prevMonth, prevYear, month, year);
+  const expenses = await seedBaseExpensesIfEmpty(month, year);
 
   return { students: studentsWithStatus, expenses };
 }
