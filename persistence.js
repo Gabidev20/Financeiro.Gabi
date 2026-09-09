@@ -109,6 +109,19 @@ export async function insertStudent({ studentName, guardianName, monthlyFee }) {
   if (error) console.error(error);
 }
 
+// Marca/desmarca a mensalidade de um aluno como paga no mês corrente.
+export async function toggleStudentPaid(id, isPaid) {
+  if (!isSupabaseEnabled) {
+    const state = readLocal();
+    const s = state.students.find((s) => s.id === id);
+    if (s) s.paid = isPaid;
+    writeLocal(state);
+    return;
+  }
+  const { error } = await supabase.from("students").update({ paid: isPaid }).eq("id", id);
+  if (error) console.error(error);
+}
+
 // Assina mudanças em tempo real (outro dispositivo pagou uma conta, adicionou
 // aluno etc.) e chama onChange para o app re-buscar e re-renderizar.
 // Retorna uma função para cancelar a assinatura (chame ao desmontar a página).

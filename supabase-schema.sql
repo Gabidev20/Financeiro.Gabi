@@ -18,8 +18,12 @@ create table if not exists public.students (
   guardian_name text not null,
   monthly_fee   numeric(10,2) not null default 0,
   active        boolean not null default true,
+  paid          boolean not null default false,  -- mensalidade do mês corrente paga? (sem histórico por mês ainda)
   created_at    timestamptz not null default now()
 );
+
+-- Se a tabela students já existia antes desta coluna ser adicionada, rode:
+-- alter table public.students add column if not exists paid boolean not null default false;
 
 -- Habilita o realtime (necessário para o supabase.channel().on('postgres_changes', ...) funcionar)
 alter publication supabase_realtime add table public.expenses;

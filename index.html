@@ -201,12 +201,14 @@
 
   /* receita box */
   .receita-box{
-    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
     background:var(--accent-soft); border:1px solid var(--border); border-radius:12px;
     padding:12px 14px; margin-top:14px;
   }
+  .receita-box > div:first-child{ min-width:0; }
   .receita-box label{ font-size:12px; font-weight:600; color:var(--accent-strong); text-transform:uppercase; letter-spacing:0.05em; }
   .receita-box .hint{ font-size:11.5px; color:var(--text-muted); margin-top:2px; }
+  tr.paid .mensalidade{ text-decoration:line-through; text-decoration-color:var(--border); }
   .currency-input{ position:relative; }
   .currency-input span{
     position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13.5px;
@@ -241,12 +243,12 @@
     background:var(--surface-alt); border:1px solid var(--border);
   }
   .add-form.open{ display:grid; }
-  .add-form .fields{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
-  .field{ display:flex; flex-direction:column; gap:4px; }
+  .add-form .fields{ display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:10px; }
+  .field{ display:flex; flex-direction:column; gap:4px; min-width:0; }
   .field label{ font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; }
   .field input{
-    padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);
-    font-size:13.5px;
+    width:100%; min-width:0; padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:13.5px;
   }
   .field input:focus, .currency-input input:focus, button:focus-visible{
     outline:2px solid var(--accent); outline-offset:1px;
@@ -339,9 +341,9 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Aluno</th><th class="num">Mensalidade</th><th class="chk"></th></tr>
+              <tr><th>Aluno</th><th class="num">Mensalidade</th><th class="chk">Pago</th><th class="chk"></th></tr>
             </thead>
-            <tbody id="students-body"><tr class="empty-row"><td colspan="3">Carregando alunos…</td></tr></tbody>
+            <tbody id="students-body"><tr class="empty-row"><td colspan="4">Carregando alunos…</td></tr></tbody>
           </table>
         </div>
 
@@ -354,6 +356,11 @@
             <span>R$</span>
             <input id="receita-input" type="number" step="0.01" min="0" inputmode="decimal">
           </div>
+        </div>
+
+        <div class="exp-footer">
+          <div class="item"><span class="k">Total recebido</span><span class="v num" id="alunos-recebido" style="color:var(--positive)">R$ 0,00</span></div>
+          <div class="item"><span class="k">A receber</span><span class="v num" id="alunos-pendente" style="color:var(--warning)">R$ 0,00</span></div>
         </div>
 
         <button class="add-toggle" id="toggle-student" type="button">+ Novo aluno</button>
@@ -421,7 +428,7 @@
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   fetchData, updateExpense, togglePaid, insertStudent,
-  insertExpense, deleteExpense, removeStudent, subscribeRealtime
+  insertExpense, deleteExpense, removeStudent, toggleStudentPaid, subscribeRealtime
 } from "./persistence.js";
 
 // Mês ativo do painel. Sem seletor de mês ainda — ajuste aqui a cada virada de mês.
@@ -450,12 +457,13 @@ function trashIcon(){
 function render(){
   var sBody = document.getElementById("students-body");
   sBody.innerHTML = state.students.length ? state.students.map(function(s){
-    return '<tr>' +
+    return '<tr class="' + (s.paid ? "paid" : "") + '">' +
       '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong><span>' + escapeHtml(s.guardian_name) + '</span></td>' +
-      '<td class="num">' + brl(Number(s.monthly_fee)) + '</td>' +
+      '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
+      '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
       '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
-  }).join("") : '<tr class="empty-row"><td colspan="3">Nenhum aluno cadastrado ainda.</td></tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="4">Nenhum aluno cadastrado ainda.</td></tr>';
   document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " aluno" : " alunos");
 
   var eBody = document.getElementById("expenses-body");
@@ -484,6 +492,11 @@ function updateTotals(){
   document.getElementById("receita-input").value = receitaAtual.toFixed(2);
   document.getElementById("stat-receita").textContent = brl(receitaAtual);
   document.getElementById("stat-receita-note").textContent = state.students.length + (state.students.length === 1 ? " aluno ativo" : " alunos ativos");
+
+  var recebido = state.students.filter(function(s){ return s.paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
+  var aReceber = state.students.filter(function(s){ return !s.paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
+  document.getElementById("alunos-recebido").textContent = brl(recebido);
+  document.getElementById("alunos-pendente").textContent = brl(aReceber);
 
   var pendente = state.expenses.filter(function(e){ return !e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
   var pago = state.expenses.filter(function(e){ return e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
@@ -566,6 +579,16 @@ document.getElementById("students-body").addEventListener("click", function(ev){
   removeStudent(id);
 });
 
+document.getElementById("students-body").addEventListener("change", function(ev){
+  var id = ev.target.getAttribute("data-toggle-student-paid");
+  if(!id) return;
+  var s = state.students.find(function(s){ return s.id === id; });
+  if(!s) return;
+  s.paid = ev.target.checked; // otimista: reflete na tela na hora
+  render();
+  toggleStudentPaid(id, ev.target.checked); // persiste — dispara o realtime para os outros dispositivos
+});
+
 document.getElementById("receita-input").addEventListener("input", function(ev){
   var v = parseFloat(ev.target.value);
   state.receitaManual = isNaN(v) ? 0 : v;
@@ -591,7 +614,7 @@ formStudent.addEventListener("submit", function(ev){
   var valor = parseFloat(document.getElementById("s-valor").value);
   if(!aluno || !resp || isNaN(valor)) return;
 
-  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true });
+  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true, paid: false });
   state.receitaManual = null; // recalcula automaticamente
   formStudent.reset();
   formStudent.classList.remove("open");
