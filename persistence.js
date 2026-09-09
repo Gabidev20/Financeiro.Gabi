@@ -81,32 +81,21 @@ async function fetchPayments(month, year) {
   return data;
 }
 
-// Marca/desmarca a mensalidade de um aluno como paga NESTE mês/ano, registrando a data do clique.
-export async function toggleStudentPaid(studentId, month, year, isPaid) {
-  const payment_date = isPaid ? new Date().toISOString().slice(0, 10) : null;
+// Define o status de pagamento de um aluno neste mês/ano — usada tanto pelo
+// checkbox "Pago" quanto pela edição direta do campo de data (digitar um dia
+// também marca como pago; limpar o campo desmarca). Sem data explícita e
+// isPaid=true, usa hoje.
+export async function setStudentPayment(studentId, month, year, isPaid, paymentDate) {
+  const finalDate = isPaid ? (paymentDate || new Date().toISOString().slice(0, 10)) : null;
   if (!isSupabaseEnabled) {
     const state = readLocal();
-    upsertLocalPayment(state, studentId, month, year, { is_paid: isPaid, payment_date });
+    upsertLocalPayment(state, studentId, month, year, { is_paid: isPaid, payment_date: finalDate });
     writeLocal(state);
     return;
   }
   const { error } = await supabase
     .from("student_payments")
-    .upsert({ student_id: studentId, month, year, is_paid: isPaid, payment_date }, { onConflict: "student_id,month,year" });
-  if (error) console.error(error);
-}
-
-// Corrige a data de um pagamento já marcado (usuário digitou outro dia).
-export async function updateStudentPaymentDate(studentId, month, year, paymentDate) {
-  if (!isSupabaseEnabled) {
-    const state = readLocal();
-    upsertLocalPayment(state, studentId, month, year, { payment_date: paymentDate });
-    writeLocal(state);
-    return;
-  }
-  const { error } = await supabase
-    .from("student_payments")
-    .upsert({ student_id: studentId, month, year, payment_date: paymentDate }, { onConflict: "student_id,month,year" });
+    .upsert({ student_id: studentId, month, year, is_paid: isPaid, payment_date: finalDate }, { onConflict: "student_id,month,year" });
   if (error) console.error(error);
 }
 

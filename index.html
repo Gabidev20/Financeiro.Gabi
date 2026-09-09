@@ -109,19 +109,15 @@
   }
   .month-btn:hover{ background:var(--surface-alt); }
 
-  .due-chip{
-    display:inline-block; font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px;
-    background:var(--surface-alt); color:var(--text-muted); white-space:nowrap;
-  }
-  .due-chip.overdue{ background:var(--critical-soft); color:var(--critical); }
-  .due-chip.today{ background:var(--warning-soft); color:var(--warning); }
-  .date-input{
+  .date-input, .due-input{
     width:64px; text-align:center; border:1px solid var(--border); border-radius:6px;
     background:var(--surface); color:var(--text); padding:5px 6px; font-size:13.5px;
     font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums;
   }
-  .date-input:focus{ outline:none; border-color:var(--accent); }
-  .date-input:disabled{ background:var(--surface-alt); color:var(--text-muted); border-color:transparent; cursor:not-allowed; }
+  .date-input:focus, .due-input:focus{ outline:none; border-color:var(--accent); }
+  .date-input::placeholder, .due-input::placeholder{ color:var(--text-muted); opacity:0.7; }
+  .due-input.overdue{ border-color:var(--critical); color:var(--critical); background:var(--critical-soft); }
+  .due-input.today{ border-color:var(--warning); color:var(--warning); background:var(--warning-soft); }
 
   .sync-pill{
     display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
@@ -435,7 +431,7 @@
               <input id="e-cat" required placeholder="Ex.: Assinaturas" list="cat-list">
               <datalist id="cat-list"></datalist>
             </div>
-            <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="date" required></div>
+            <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="text" inputmode="numeric" maxlength="5" placeholder="DD/MM" required></div>
             <div class="field"><label for="e-valor">Valor (R$)</label><input id="e-valor" type="number" step="0.01" min="0" required placeholder="60"></div>
           </div>
           <div class="actions">
@@ -454,8 +450,7 @@
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
-  removeStudent, toggleStudentPaid, updateStudentPaymentDate,
-  loadMonthData, subscribeRealtime
+  removeStudent, setStudentPayment, loadMonthData, subscribeRealtime
 } from "./persistence.js";
 
 var MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -510,7 +505,7 @@ function render(){
     return '<tr class="' + (s.is_paid ? "paid" : "") + '">' +
       '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong><span>' + escapeHtml(s.guardian_name) + '</span></td>' +
       '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
-      '<td><input type="text" inputmode="numeric" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" ' + (s.is_paid ? "" : "disabled") + ' aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
+      '<td><input type="text" inputmode="numeric" maxlength="5" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
       '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
@@ -523,7 +518,7 @@ function render(){
     return '<tr class="' + (e.is_paid ? "paid" : "") + '">' +
       '<td class="desc">' + escapeHtml(e.description) + '</td>' +
       '<td><span class="cat-chip">' + escapeHtml(e.category) + '</span></td>' +
-      '<td>' + (e.due_date ? '<span class="due-chip' + (status ? " " + status : "") + '">' + formatShortDate(e.due_date) + '</span>' : '<span class="due-chip">—</span>') + '</td>' +
+      '<td><input type="text" inputmode="numeric" maxlength="5" class="due-input' + (status ? " " + status : "") + '" data-edit-due="' + e.id + '" value="' + (e.due_date ? formatShortDate(e.due_date) : "") + '" placeholder="DD/MM" aria-label="Vencimento de ' + escapeHtml(e.description) + '"></td>' +
       '<td class="num"><span class="value-edit"><span>R$</span><input type="number" step="0.01" min="0" class="value-input" data-edit-expense="' + e.id + '" value="' + Number(e.amount).toFixed(2) + '" aria-label="Valor de ' + escapeHtml(e.description) + '"></span></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-expense="' + e.id + '" ' + (e.is_paid ? "checked" : "") + ' aria-label="Marcar ' + escapeHtml(e.description) + ' como pago"></td>' +
       '<td class="chk"><button class="row-del" data-remove-expense="' + e.id + '" aria-label="Remover ' + escapeHtml(e.description) + '">' + trashIcon() + '</button></td>' +
@@ -608,7 +603,30 @@ document.getElementById("expenses-body").addEventListener("change", function(ev)
       updateExpense(editId, { amount: e2.amount }); // garante que o valor final seja salvo ao sair do campo
       ev.target.value = Number(e2.amount).toFixed(2);
     }
+    return;
   }
+
+  var dueId = ev.target.getAttribute("data-edit-due");
+  if(dueId){
+    var e3 = state.expenses.find(function(e){ return e.id === dueId; });
+    if(!e3) return;
+    var typed = ev.target.value.trim();
+    if(!typed){
+      e3.due_date = null;
+      render();
+      updateExpense(dueId, { due_date: null });
+      return;
+    }
+    var isoDue = parseDayFromInput(typed, currentMonth, currentYear); // ignora o mês digitado — sempre usa o mês/ano ativo
+    if(!isoDue){ ev.target.value = e3.due_date ? formatShortDate(e3.due_date) : ""; return; }
+    e3.due_date = isoDue;
+    render();
+    updateExpense(dueId, { due_date: isoDue });
+  }
+});
+
+document.getElementById("expenses-body").addEventListener("keydown", function(ev){
+  if(ev.key === "Enter" && ev.target.hasAttribute("data-edit-due")) ev.target.blur();
 });
 
 document.getElementById("expenses-body").addEventListener("click", function(ev){
@@ -638,9 +656,9 @@ document.getElementById("students-body").addEventListener("change", function(ev)
     var s = state.students.find(function(s){ return s.id === toggleId; });
     if(s){
       s.is_paid = ev.target.checked;
-      s.payment_date = ev.target.checked ? todayIso : null; // sugere hoje; o campo Data pgto permite corrigir
+      s.payment_date = ev.target.checked ? todayIso : null; // sugere hoje; o campo Data pgto permite corrigir o dia
       render();
-      toggleStudentPaid(toggleId, currentMonth, currentYear, ev.target.checked); // persiste — dispara o realtime pros outros dispositivos
+      setStudentPayment(toggleId, currentMonth, currentYear, ev.target.checked); // persiste — dispara o realtime pros outros dispositivos
     }
     return;
   }
@@ -649,11 +667,21 @@ document.getElementById("students-body").addEventListener("change", function(ev)
   if(dateId){
     var s2 = state.students.find(function(s){ return s.id === dateId; });
     if(!s2) return;
-    var iso = parseDayFromInput(ev.target.value, currentMonth, currentYear);
+    var typed = ev.target.value.trim();
+    if(!typed){
+      // campo limpo: desmarca o pagamento
+      s2.is_paid = false;
+      s2.payment_date = null;
+      render();
+      setStudentPayment(dateId, currentMonth, currentYear, false);
+      return;
+    }
+    var iso = parseDayFromInput(typed, currentMonth, currentYear); // ignora o mês digitado — sempre usa o mês ativo do painel
     if(!iso){ ev.target.value = s2.payment_date ? formatShortDate(s2.payment_date) : ""; return; }
+    s2.is_paid = true;
     s2.payment_date = iso;
-    ev.target.value = formatShortDate(iso);
-    updateStudentPaymentDate(dateId, currentMonth, currentYear, iso);
+    render();
+    setStudentPayment(dateId, currentMonth, currentYear, true, iso);
   }
 });
 
@@ -711,8 +739,9 @@ formExpense.addEventListener("submit", function(ev){
   ev.preventDefault();
   var desc = document.getElementById("e-desc").value.trim();
   var cat = document.getElementById("e-cat").value.trim();
-  var due = document.getElementById("e-due").value;
+  var dueTyped = document.getElementById("e-due").value.trim();
   var valor = parseFloat(document.getElementById("e-valor").value);
+  var due = dueTyped ? parseDayFromInput(dueTyped, currentMonth, currentYear) : null; // dia digitado + mês/ano ativo do painel
   if(!desc || !cat || !due || isNaN(valor)) return;
 
   state.expenses.push({ id: uid("tmp"), description: desc, category: cat, amount: valor, is_paid: false, due_date: due, month: currentMonth, year: currentYear });
