@@ -115,8 +115,13 @@
   }
   .due-chip.overdue{ background:var(--critical-soft); color:var(--critical); }
   .due-chip.today{ background:var(--warning-soft); color:var(--warning); }
-  .chk-paid{ width:60px; }
-  .paid-date{ font-size:9.5px; color:var(--text-muted); margin-top:2px; white-space:nowrap; }
+  .date-input{
+    width:64px; text-align:center; border:1px solid var(--border); border-radius:6px;
+    background:var(--surface); color:var(--text); padding:5px 6px; font-size:13.5px;
+    font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums;
+  }
+  .date-input:focus{ outline:none; border-color:var(--accent); }
+  .date-input:disabled{ background:var(--surface-alt); color:var(--text-muted); border-color:transparent; cursor:not-allowed; }
 
   .sync-pill{
     display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
@@ -361,9 +366,9 @@
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Aluno</th><th class="num">Mensalidade</th><th class="chk chk-paid">Pago</th><th class="chk"></th></tr>
+              <tr><th>Aluno</th><th class="num">Mensalidade</th><th>Data pgto</th><th class="chk">Pago</th><th class="chk"></th></tr>
             </thead>
-            <tbody id="students-body"><tr class="empty-row"><td colspan="4">Carregando alunos…</td></tr></tbody>
+            <tbody id="students-body"><tr class="empty-row"><td colspan="5">Carregando alunos…</td></tr></tbody>
           </table>
         </div>
 
@@ -448,9 +453,9 @@
 <script type="module">
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
-  fetchData, updateExpense, togglePaid, insertStudent,
-  insertExpense, deleteExpense, removeStudent, toggleStudentPaid,
-  cloneMonthIfEmpty, subscribeRealtime
+  updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
+  removeStudent, toggleStudentPaid, updateStudentPaymentDate,
+  loadMonthData, subscribeRealtime
 } from "./persistence.js";
 
 var MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -488,19 +493,28 @@ function dueStatus(e){
   if(e.due_date === todayIso) return "today";
   return "";
 }
+// Lê só o dia digitado (ex.: "4", "04", "04/09") e monta a data ISO usando o mês/ano em exibição.
+function parseDayFromInput(text, month, year){
+  var m = String(text).trim().match(/^(\d{1,2})/);
+  if(!m) return null;
+  var day = parseInt(m[1], 10);
+  if(isNaN(day) || day < 1) return null;
+  var lastDay = new Date(year, month, 0).getDate();
+  day = Math.min(day, lastDay);
+  return year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+}
 
 function render(){
   var sBody = document.getElementById("students-body");
   sBody.innerHTML = state.students.length ? state.students.map(function(s){
-    return '<tr class="' + (s.paid ? "paid" : "") + '">' +
+    return '<tr class="' + (s.is_paid ? "paid" : "") + '">' +
       '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong><span>' + escapeHtml(s.guardian_name) + '</span></td>' +
       '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
-      '<td class="chk chk-paid"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga">' +
-        (s.paid && s.payment_date ? '<div class="paid-date">' + formatShortDate(s.payment_date) + '</div>' : '') +
-      '</td>' +
+      '<td><input type="text" inputmode="numeric" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" ' + (s.is_paid ? "" : "disabled") + ' aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
+      '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
       '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
-  }).join("") : '<tr class="empty-row"><td colspan="4">Nenhum aluno cadastrado ainda.</td></tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="5">Nenhum aluno cadastrado ainda.</td></tr>';
   document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " aluno" : " alunos");
 
   var eBody = document.getElementById("expenses-body");
@@ -532,8 +546,8 @@ function updateTotals(){
   document.getElementById("stat-receita").textContent = brl(receitaAtual);
   document.getElementById("stat-receita-note").textContent = state.students.length + (state.students.length === 1 ? " aluno ativo" : " alunos ativos");
 
-  var recebido = state.students.filter(function(s){ return s.paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
-  var aReceber = state.students.filter(function(s){ return !s.paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
+  var recebido = state.students.filter(function(s){ return s.is_paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
+  var aReceber = state.students.filter(function(s){ return !s.is_paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
   document.getElementById("alunos-recebido").textContent = brl(recebido);
   document.getElementById("alunos-pendente").textContent = brl(aReceber);
 
@@ -619,14 +633,32 @@ document.getElementById("students-body").addEventListener("click", function(ev){
 });
 
 document.getElementById("students-body").addEventListener("change", function(ev){
-  var id = ev.target.getAttribute("data-toggle-student-paid");
-  if(!id) return;
-  var s = state.students.find(function(s){ return s.id === id; });
-  if(!s) return;
-  s.paid = ev.target.checked;
-  s.payment_date = ev.target.checked ? todayIso : null; // registra a data do clique — sem input extra
-  render();
-  toggleStudentPaid(id, ev.target.checked); // persiste (inclui payment_date) — dispara o realtime pros outros dispositivos
+  var toggleId = ev.target.getAttribute("data-toggle-student-paid");
+  if(toggleId){
+    var s = state.students.find(function(s){ return s.id === toggleId; });
+    if(s){
+      s.is_paid = ev.target.checked;
+      s.payment_date = ev.target.checked ? todayIso : null; // sugere hoje; o campo Data pgto permite corrigir
+      render();
+      toggleStudentPaid(toggleId, currentMonth, currentYear, ev.target.checked); // persiste — dispara o realtime pros outros dispositivos
+    }
+    return;
+  }
+
+  var dateId = ev.target.getAttribute("data-payment-date");
+  if(dateId){
+    var s2 = state.students.find(function(s){ return s.id === dateId; });
+    if(!s2) return;
+    var iso = parseDayFromInput(ev.target.value, currentMonth, currentYear);
+    if(!iso){ ev.target.value = s2.payment_date ? formatShortDate(s2.payment_date) : ""; return; }
+    s2.payment_date = iso;
+    ev.target.value = formatShortDate(iso);
+    updateStudentPaymentDate(dateId, currentMonth, currentYear, iso);
+  }
+});
+
+document.getElementById("students-body").addEventListener("keydown", function(ev){
+  if(ev.key === "Enter" && ev.target.hasAttribute("data-payment-date")) ev.target.blur();
 });
 
 document.getElementById("receita-input").addEventListener("input", function(ev){
@@ -654,13 +686,13 @@ formStudent.addEventListener("submit", function(ev){
   var valor = parseFloat(document.getElementById("s-valor").value);
   if(!aluno || !resp || isNaN(valor)) return;
 
-  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true, paid: false, payment_date: null, month: currentMonth, year: currentYear });
+  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true, is_paid: false, payment_date: null });
   state.receitaManual = null; // recalcula automaticamente
   formStudent.reset();
   formStudent.classList.remove("open");
   render();
 
-  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor, month: currentMonth, year: currentYear });
+  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor });
 });
 
 // ---- formulário: nova despesa ----
@@ -696,12 +728,13 @@ formExpense.addEventListener("submit", function(ev){
 function monthLabel(){ return MONTH_NAMES[currentMonth - 1] + " · " + currentYear; }
 
 function showLoading(){
-  document.getElementById("students-body").innerHTML = '<tr class="empty-row"><td colspan="4">Carregando alunos…</td></tr>';
+  document.getElementById("students-body").innerHTML = '<tr class="empty-row"><td colspan="5">Carregando alunos…</td></tr>';
   document.getElementById("expenses-body").innerHTML = '<tr class="empty-row"><td colspan="6">Carregando despesas…</td></tr>';
 }
 
-// Troca o mês ativo. Se o mês de destino ainda não tiver dados, clona alunos e
-// despesas do mês anterior (com o status "Pago" zerado) antes de exibir.
+// Troca o mês ativo: os alunos ativos vêm do cadastro global (sempre os
+// mesmos), o status de pagamento é buscado só para este mês/ano, e as
+// despesas são clonadas da base do mês anterior se o mês novo estiver vazio.
 async function goToMonth(month, year){
   currentMonth = month;
   currentYear = year;
@@ -709,9 +742,7 @@ async function goToMonth(month, year){
   todayIso = new Date().toISOString().slice(0, 10);
   showLoading();
 
-  var prevMonth = month === 1 ? 12 : month - 1;
-  var prevYear = month === 1 ? year - 1 : year;
-  var data = await cloneMonthIfEmpty(prevMonth, prevYear, month, year);
+  var data = await loadMonthData(month, year);
   state.students = data.students || [];
   state.expenses = data.expenses || [];
   render();
@@ -745,7 +776,7 @@ goToMonth(currentMonth, currentYear);
 
 subscribeRealtime(function(){
   // outro dispositivo mudou algo (pagou conta, editou valor, novo aluno) — rebusca o mês atual e redesenha
-  fetchData(currentMonth, currentYear).then(function(data){
+  loadMonthData(currentMonth, currentYear).then(function(data){
     state.students = data.students || [];
     state.expenses = data.expenses || [];
     render();
