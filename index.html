@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel da Gabi</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F6F8F3;
+    --surface:#FFFFFF;
+    --surface-alt:#ECF1E8;
+    --border:#DCE3D7;
+    --text:#16211B;
+    --text-muted:#5B6B5F;
+    --accent:#1E7A5A;
+    --accent-strong:#12503A;
+    --accent-soft:#E1F0E6;
+    --positive:#2E9E63;
+    --positive-soft:#E3F3E9;
+    --warning:#B9762C;
+    --warning-soft:#F7EBDA;
+    --critical:#BD453D;
+    --critical-soft:#F8E4E2;
+    --shadow: 0 1px 2px rgba(20,32,25,0.04), 0 8px 24px -12px rgba(20,32,25,0.12);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0E1512;
+      --surface:#141E19;
+      --surface-alt:#1B2620;
+      --border:#293A31;
+      --text:#E7EEE8;
+      --text-muted:#94A89B;
+      --accent:#4ED9A0;
+      --accent-strong:#8CEEBE;
+      --accent-soft:#173226;
+      --positive:#4ED9A0;
+      --positive-soft:#16332A;
+      --warning:#E2A15D;
+      --warning-soft:#3A2C18;
+      --critical:#E58177;
+      --critical-soft:#3A1D1B;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0E1512;
+    --surface:#141E19;
+    --surface-alt:#1B2620;
+    --border:#293A31;
+    --text:#E7EEE8;
+    --text-muted:#94A89B;
+    --accent:#4ED9A0;
+    --accent-strong:#8CEEBE;
+    --accent-soft:#173226;
+    --positive:#4ED9A0;
+    --positive-soft:#16332A;
+    --warning:#E2A15D;
+    --warning-soft:#3A2C18;
+    --critical:#E58177;
+    --critical-soft:#3A1D1B;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    color-scheme: dark;
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Work Sans", ui-sans-serif, system-ui, sans-serif;
+    line-height:1.45;
+  }
+  h1,h2,h3{ font-family:"Fraunces", Georgia, serif; text-wrap:balance; margin:0; }
+  .mono, .num{ font-family:"IBM Plex Mono", ui-monospace, "Courier New", monospace; font-variant-numeric:tabular-nums; }
+  button, input{ font-family:inherit; }
+  a{ color:var(--accent-strong); }
+
+  .shell{ max-width:1180px; margin:0 auto; padding:32px 24px 64px; }
+
+  /* header */
+  .top{
+    display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between;
+    gap:16px; margin-bottom:28px;
+  }
+  .eyebrow{
+    font-size:12px; font-weight:600; letter-spacing:0.09em; text-transform:uppercase;
+    color:var(--accent-strong); margin:0 0 6px;
+  }
+  .top h1{ font-size:30px; font-weight:600; color:var(--text); }
+  .top .sub{ color:var(--text-muted); font-size:14.5px; margin-top:4px; }
+  .month-pill{
+    background:var(--surface); border:1px solid var(--border); border-radius:999px;
+    padding:8px 16px; font-size:13px; font-weight:600; color:var(--text); box-shadow:var(--shadow);
+    white-space:nowrap;
+  }
+  .month-pill .dot{ color:var(--accent); margin:0 6px; }
+
+  .sync-pill{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+    padding:6px 12px; border-radius:999px; margin-top:10px; border:1px solid var(--border);
+    background:var(--surface-alt); color:var(--text-muted);
+  }
+  .sync-pill .led{ width:7px; height:7px; border-radius:50%; background:var(--text-muted); flex:none; }
+  .sync-pill.on{ color:var(--accent-strong); background:var(--accent-soft); border-color:transparent; }
+  .sync-pill.on .led{ background:var(--positive); }
+  .sync-pill.off{ color:var(--warning); background:var(--warning-soft); border-color:transparent; }
+  .sync-pill.off .led{ background:var(--warning); }
+
+  /* stat grid */
+  .stat-grid{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:26px;
+  }
+  .stat-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:18px 18px 16px; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; gap:10px; min-width:0;
+  }
+  .stat-top{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .stat-label{
+    font-size:11.5px; font-weight:600; letter-spacing:0.07em; text-transform:uppercase;
+    color:var(--text-muted);
+  }
+  .stat-icon{
+    width:28px; height:28px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    flex:none;
+  }
+  .stat-icon svg{ width:15px; height:15px; }
+  .stat-card.receita .stat-icon{ background:var(--accent-soft); color:var(--accent-strong); }
+  .stat-card.pendente .stat-icon{ background:var(--warning-soft); color:var(--warning); }
+  .stat-card.pago .stat-icon{ background:var(--positive-soft); color:var(--positive); }
+  .stat-card.saldo .stat-icon{ background:var(--surface-alt); color:var(--text); }
+  .stat-value{ font-size:23px; font-weight:600; letter-spacing:-0.01em; }
+  .stat-value.warn{ color:var(--warning); }
+  .stat-value.good{ color:var(--positive); }
+  .stat-note{ font-size:12px; color:var(--text-muted); }
+
+  /* panels */
+  .grid{ display:grid; grid-template-columns:5fr 7fr; gap:16px; align-items:start; }
+  .panel{
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:16px 20px; border-bottom:1px solid var(--border);
+  }
+  .panel-head h2{ font-size:17px; font-weight:600; }
+  .panel-head .count{ font-size:12px; color:var(--text-muted); }
+  .panel-body{ padding:16px 20px 20px; }
+
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; }
+  th{
+    text-align:left; font-size:11px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--text-muted); padding:0 10px 8px; border-bottom:1px solid var(--border);
+  }
+  td{ padding:10px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  tr:last-child td{ border-bottom:none; }
+  th.num, td.num{ text-align:right; }
+  th.chk, td.chk{ text-align:center; width:44px; }
+  .name-cell strong{ display:block; font-weight:600; }
+  .name-cell span{ display:block; font-size:12px; color:var(--text-muted); }
+  tr.paid td{ color:var(--text-muted); }
+  tr.paid .desc{ text-decoration:line-through; text-decoration-color:var(--border); }
+  .cat-chip{
+    display:inline-block; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
+    background:var(--surface-alt); color:var(--text-muted); white-space:nowrap;
+  }
+  .row-del{
+    border:none; background:none; color:var(--text-muted); cursor:pointer; padding:4px; border-radius:6px;
+    line-height:0;
+  }
+  .row-del:hover{ color:var(--critical); background:var(--critical-soft); }
+  .row-del svg{ width:13px; height:13px; display:block; }
+
+  .value-edit{ display:inline-flex; align-items:center; gap:2px; justify-content:flex-end; }
+  .value-edit span{ color:var(--text-muted); font-size:12.5px; }
+  .value-input{
+    width:88px; text-align:right; border:1px solid transparent; background:transparent; border-radius:6px;
+    padding:4px 6px; font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums;
+    font-size:13.5px; color:var(--text);
+  }
+  .value-input:hover{ border-color:var(--border); }
+  .value-input:focus{ border-color:var(--accent); background:var(--surface); outline:none; }
+  .value-input::-webkit-inner-spin-button, .value-input::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
+  .value-input[type="number"]{ -moz-appearance:textfield; }
+  tr.paid .value-input{ color:var(--text-muted); text-decoration:line-through; text-decoration-color:var(--border); }
+
+  input[type="checkbox"]{
+    width:18px; height:18px; accent-color:var(--positive); cursor:pointer;
+  }
+
+  .empty-row td{ text-align:center; color:var(--text-muted); padding:22px 10px; font-size:13px; }
+
+  /* receita box */
+  .receita-box{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background:var(--accent-soft); border:1px solid var(--border); border-radius:12px;
+    padding:12px 14px; margin-top:14px;
+  }
+  .receita-box label{ font-size:12px; font-weight:600; color:var(--accent-strong); text-transform:uppercase; letter-spacing:0.05em; }
+  .receita-box .hint{ font-size:11.5px; color:var(--text-muted); margin-top:2px; }
+  .currency-input{ position:relative; }
+  .currency-input span{
+    position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--text-muted); font-size:13.5px;
+  }
+  .currency-input input{
+    width:150px; padding:8px 10px 8px 30px; border-radius:9px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:14.5px; font-weight:600; text-align:right;
+  }
+
+  /* totals footer for expenses */
+  .exp-footer{
+    display:flex; gap:18px; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border);
+  }
+  .exp-footer .item{ display:flex; flex-direction:column; gap:2px; }
+  .exp-footer .item .k{ font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
+  .exp-footer .item .v{ font-size:15px; font-weight:600; }
+
+  .progress{
+    height:8px; border-radius:999px; overflow:hidden; background:var(--warning-soft); display:flex; margin-top:12px;
+  }
+  .progress .fill{ background:var(--positive); height:100%; }
+
+  /* add forms */
+  .add-toggle{
+    border:1px dashed var(--border); background:none; color:var(--accent-strong); font-weight:600; font-size:13px;
+    padding:9px 14px; border-radius:10px; cursor:pointer; width:100%; text-align:left; margin-top:14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .add-toggle:hover{ background:var(--surface-alt); }
+  .add-form{
+    display:none; grid-template-columns:1fr; gap:10px; margin-top:12px; padding:14px; border-radius:12px;
+    background:var(--surface-alt); border:1px solid var(--border);
+  }
+  .add-form.open{ display:grid; }
+  .add-form .fields{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em; }
+  .field input{
+    padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text);
+    font-size:13.5px;
+  }
+  .field input:focus, .currency-input input:focus, button:focus-visible{
+    outline:2px solid var(--accent); outline-offset:1px;
+  }
+  .add-form .actions{ display:flex; gap:8px; justify-content:flex-end; }
+  .btn{
+    border:none; border-radius:9px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-strong); }
+  .btn-ghost{ background:none; color:var(--text-muted); }
+  .btn-ghost:hover{ color:var(--text); }
+
+  footer.note{
+    text-align:center; color:var(--text-muted); font-size:12px; margin-top:28px;
+  }
+
+  @media (max-width: 900px){
+    .grid{ grid-template-columns:1fr; }
+    .stat-grid{ grid-template-columns:repeat(2, 1fr); }
+    .add-form .fields{ grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .stat-card, .panel{ transition: box-shadow .15s ease; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Credenciais do Supabase — precisam existir ANTES de qualquer módulo que importe supabaseClient.js -->
+<script>
+  window.SUPABASE_URL = "https://tyeohandmesleovcyidc.supabase.co";
+  window.SUPABASE_ANON_KEY = "sb_publishable_W2yITaI98F168LrHebRtUQ_FH_SCJBG";
+</script>
+
+<div class="shell">
+  <div class="top">
+    <div>
+      <p class="eyebrow">Painel financeiro</p>
+      <h1>Aulas de Inglês da Gabi</h1>
+      <p class="sub">Mensalidades de alunos e despesas do mês, com baixa em tempo real.</p>
+      <span class="sync-pill" id="sync-pill"><span class="led"></span><span id="sync-label">Verificando conexão…</span></span>
+    </div>
+    <div class="month-pill">Setembro <span class="dot">·</span> 2026</div>
+  </div>
+
+  <div class="stat-grid">
+    <div class="stat-card receita">
+      <div class="stat-top">
+        <span class="stat-label">Receita mensal</span>
+        <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="14.5" r="1.4" fill="currentColor" stroke="none"/></svg></span>
+      </div>
+      <div class="stat-value num" id="stat-receita">R$ 0,00</div>
+      <div class="stat-note" id="stat-receita-note">0 alunos ativos</div>
+    </div>
+    <div class="stat-card pendente">
+      <div class="stat-top">
+        <span class="stat-label">A pagar</span>
+        <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></span>
+      </div>
+      <div class="stat-value num warn" id="stat-pendente">R$ 0,00</div>
+      <div class="stat-note" id="stat-pendente-note">0 contas pendentes</div>
+    </div>
+    <div class="stat-card pago">
+      <div class="stat-top">
+        <span class="stat-label">Já pago</span>
+        <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+      </div>
+      <div class="stat-value num good" id="stat-pago">R$ 0,00</div>
+      <div class="stat-note" id="stat-pago-note">0 contas quitadas</div>
+    </div>
+    <div class="stat-card saldo">
+      <div class="stat-top">
+        <span class="stat-label">Saldo previsto</span>
+        <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 19V9M12 19V5M18 19v7"/></svg></span>
+      </div>
+      <div class="stat-value num" id="stat-saldo">R$ 0,00</div>
+      <div class="stat-note">Receita − pendente − pago</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- ENTRADAS -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Alunos &amp; mensalidades</h2>
+        <span class="count" id="alunos-count">0 alunos</span>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Aluno</th><th class="num">Mensalidade</th><th class="chk"></th></tr>
+            </thead>
+            <tbody id="students-body"><tr class="empty-row"><td colspan="3">Carregando alunos…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="receita-box">
+          <div>
+            <label for="receita-input">Receita atual</label>
+            <p class="hint">Soma das mensalidades — editável</p>
+          </div>
+          <div class="currency-input">
+            <span>R$</span>
+            <input id="receita-input" type="number" step="0.01" min="0" inputmode="decimal">
+          </div>
+        </div>
+
+        <button class="add-toggle" id="toggle-student" type="button">+ Novo aluno</button>
+        <form class="add-form" id="form-student">
+          <div class="fields">
+            <div class="field"><label for="s-aluno">Aluno</label><input id="s-aluno" required placeholder="Ex.: Manu"></div>
+            <div class="field"><label for="s-resp">Responsável</label><input id="s-resp" required placeholder="Ex.: Débora"></div>
+            <div class="field"><label for="s-valor">Mensalidade (R$)</label><input id="s-valor" type="number" step="0.01" min="0" required placeholder="180"></div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-ghost" id="cancel-student">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Adicionar aluno</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- DESPESAS -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Despesas do mês</h2>
+        <span class="count" id="despesas-count">0 contas</span>
+      </div>
+      <div class="panel-body">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th class="chk">Pago</th><th class="chk"></th></tr>
+            </thead>
+            <tbody id="expenses-body"><tr class="empty-row"><td colspan="5">Carregando despesas…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="progress"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <div class="exp-footer">
+          <div class="item"><span class="k">Pendente</span><span class="v num" id="foot-pendente" style="color:var(--warning)">R$ 0,00</span></div>
+          <div class="item"><span class="k">Pago</span><span class="v num" id="foot-pago" style="color:var(--positive)">R$ 0,00</span></div>
+          <div class="item"><span class="k">Total de despesas</span><span class="v num" id="foot-total">R$ 0,00</span></div>
+        </div>
+
+        <button class="add-toggle" id="toggle-expense" type="button">+ Nova despesa</button>
+        <form class="add-form" id="form-expense">
+          <div class="fields">
+            <div class="field"><label for="e-desc">Descrição</label><input id="e-desc" required placeholder="Ex.: Internet"></div>
+            <div class="field">
+              <label for="e-cat">Categoria</label>
+              <input id="e-cat" required placeholder="Ex.: Assinaturas" list="cat-list">
+              <datalist id="cat-list"></datalist>
+            </div>
+            <div class="field"><label for="e-valor">Valor (R$)</label><input id="e-valor" type="number" step="0.01" min="0" required placeholder="60"></div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-ghost" id="cancel-expense">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Adicionar despesa</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <footer class="note" id="footer-note">Conectando ao Supabase…</footer>
+</div>
+
+<script type="module">
+import { isSupabaseEnabled } from "./supabaseClient.js";
+import {
+  fetchData, updateExpense, togglePaid, insertStudent,
+  insertExpense, deleteExpense, removeStudent, subscribeRealtime
+} from "./persistence.js";
+
+// Mês ativo do painel. Sem seletor de mês ainda — ajuste aqui a cada virada de mês.
+var MONTH = 9;
+var YEAR = 2026;
+
+var state = { students: [], expenses: [], receitaManual: null };
+var syncTimers = {};
+
+function brl(n){
+  return (n < 0 ? "-" : "") + Math.abs(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+function uid(prefix){ return prefix + "_" + Math.random().toString(36).slice(2, 9); }
+function sumStudents(){
+  return state.students.reduce(function(acc, s){ return acc + Number(s.monthly_fee || 0); }, 0);
+}
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, function(ch){
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+  });
+}
+function trashIcon(){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>';
+}
+
+function render(){
+  var sBody = document.getElementById("students-body");
+  sBody.innerHTML = state.students.length ? state.students.map(function(s){
+    return '<tr>' +
+      '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong><span>' + escapeHtml(s.guardian_name) + '</span></td>' +
+      '<td class="num">' + brl(Number(s.monthly_fee)) + '</td>' +
+      '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
+      '</tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="3">Nenhum aluno cadastrado ainda.</td></tr>';
+  document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " aluno" : " alunos");
+
+  var eBody = document.getElementById("expenses-body");
+  eBody.innerHTML = state.expenses.length ? state.expenses.map(function(e){
+    return '<tr class="' + (e.is_paid ? "paid" : "") + '">' +
+      '<td class="desc">' + escapeHtml(e.description) + '</td>' +
+      '<td><span class="cat-chip">' + escapeHtml(e.category) + '</span></td>' +
+      '<td class="num"><span class="value-edit"><span>R$</span><input type="number" step="0.01" min="0" class="value-input" data-edit-expense="' + e.id + '" value="' + Number(e.amount).toFixed(2) + '" aria-label="Valor de ' + escapeHtml(e.description) + '"></span></td>' +
+      '<td class="chk"><input type="checkbox" data-toggle-expense="' + e.id + '" ' + (e.is_paid ? "checked" : "") + ' aria-label="Marcar ' + escapeHtml(e.description) + ' como pago"></td>' +
+      '<td class="chk"><button class="row-del" data-remove-expense="' + e.id + '" aria-label="Remover ' + escapeHtml(e.description) + '">' + trashIcon() + '</button></td>' +
+      '</tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="5">Nenhuma despesa cadastrada em Setembro/2026.</td></tr>';
+  document.getElementById("despesas-count").textContent = state.expenses.length + (state.expenses.length === 1 ? " conta" : " contas");
+
+  var cats = Array.from(new Set(state.expenses.map(function(e){ return e.category; })));
+  document.getElementById("cat-list").innerHTML = cats.map(function(c){ return '<option value="' + escapeHtml(c) + '">'; }).join("");
+
+  updateTotals();
+}
+
+// Recalcula os cards e o rodapé sem tocar nas linhas da tabela — evita perder
+// o foco/cursor de um input que o usuário está editando no momento.
+function updateTotals(){
+  var receitaCalc = sumStudents();
+  var receitaAtual = state.receitaManual != null ? state.receitaManual : receitaCalc;
+  document.getElementById("receita-input").value = receitaAtual.toFixed(2);
+  document.getElementById("stat-receita").textContent = brl(receitaAtual);
+  document.getElementById("stat-receita-note").textContent = state.students.length + (state.students.length === 1 ? " aluno ativo" : " alunos ativos");
+
+  var pendente = state.expenses.filter(function(e){ return !e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var pago = state.expenses.filter(function(e){ return e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var totalDespesas = pendente + pago;
+  var saldo = receitaAtual - pendente - pago;
+
+  document.getElementById("stat-pendente").textContent = brl(pendente);
+  document.getElementById("stat-pendente-note").textContent = state.expenses.filter(function(e){return !e.is_paid;}).length + " contas pendentes";
+  document.getElementById("stat-pago").textContent = brl(pago);
+  document.getElementById("stat-pago-note").textContent = state.expenses.filter(function(e){return e.is_paid;}).length + " contas quitadas";
+
+  var saldoEl = document.getElementById("stat-saldo");
+  saldoEl.textContent = brl(saldo);
+  saldoEl.classList.remove("warn", "good");
+  saldoEl.classList.add(saldo < 0 ? "warn" : "good");
+
+  document.getElementById("foot-pendente").textContent = brl(pendente);
+  document.getElementById("foot-pago").textContent = brl(pago);
+  document.getElementById("foot-total").textContent = brl(totalDespesas);
+
+  var pct = totalDespesas > 0 ? (pago / totalDespesas) * 100 : 0;
+  document.getElementById("progress-fill").style.width = pct.toFixed(1) + "%";
+}
+
+// ---- eventos: despesas ----
+
+document.getElementById("expenses-body").addEventListener("input", function(ev){
+  var id = ev.target.getAttribute("data-edit-expense");
+  if(!id) return;
+  var exp = state.expenses.find(function(e){ return e.id === id; });
+  if(!exp) return;
+  var v = parseFloat(ev.target.value);
+  exp.amount = isNaN(v) || v < 0 ? 0 : v;
+  updateTotals(); // reflexo imediato na tela
+
+  clearTimeout(syncTimers[id]);
+  syncTimers[id] = setTimeout(function(){ updateExpense(id, { amount: exp.amount }); }, 500); // debounce: não bate no banco a cada tecla
+});
+
+document.getElementById("expenses-body").addEventListener("change", function(ev){
+  var toggleId = ev.target.getAttribute("data-toggle-expense");
+  if(toggleId){
+    var exp = state.expenses.find(function(e){ return e.id === toggleId; });
+    if(exp){
+      exp.is_paid = ev.target.checked; // otimista: atualiza a tela na hora
+      updateTotals();
+      togglePaid(toggleId, ev.target.checked); // persiste — dispara o realtime para os outros dispositivos
+    }
+    return;
+  }
+  var editId = ev.target.getAttribute("data-edit-expense");
+  if(editId){
+    var e2 = state.expenses.find(function(e){ return e.id === editId; });
+    if(e2){
+      clearTimeout(syncTimers[editId]);
+      updateExpense(editId, { amount: e2.amount }); // garante que o valor final seja salvo ao sair do campo
+      ev.target.value = Number(e2.amount).toFixed(2);
+    }
+  }
+});
+
+document.getElementById("expenses-body").addEventListener("click", function(ev){
+  var btn = ev.target.closest("[data-remove-expense]");
+  if(!btn) return;
+  var id = btn.getAttribute("data-remove-expense");
+  state.expenses = state.expenses.filter(function(e){ return e.id !== id; });
+  render();
+  deleteExpense(id);
+});
+
+// ---- eventos: alunos ----
+
+document.getElementById("students-body").addEventListener("click", function(ev){
+  var btn = ev.target.closest("[data-remove-student]");
+  if(!btn) return;
+  var id = btn.getAttribute("data-remove-student");
+  state.students = state.students.filter(function(s){ return s.id !== id; });
+  state.receitaManual = null;
+  render();
+  removeStudent(id);
+});
+
+document.getElementById("receita-input").addEventListener("input", function(ev){
+  var v = parseFloat(ev.target.value);
+  state.receitaManual = isNaN(v) ? 0 : v;
+  updateTotals();
+});
+
+// ---- formulário: novo aluno ----
+
+var toggleStudent = document.getElementById("toggle-student");
+var formStudent = document.getElementById("form-student");
+toggleStudent.addEventListener("click", function(){
+  formStudent.classList.toggle("open");
+  if(formStudent.classList.contains("open")) document.getElementById("s-aluno").focus();
+});
+document.getElementById("cancel-student").addEventListener("click", function(){
+  formStudent.classList.remove("open");
+  formStudent.reset();
+});
+formStudent.addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var aluno = document.getElementById("s-aluno").value.trim();
+  var resp = document.getElementById("s-resp").value.trim();
+  var valor = parseFloat(document.getElementById("s-valor").value);
+  if(!aluno || !resp || isNaN(valor)) return;
+
+  state.students.push({ id: uid("tmp"), student_name: aluno, guardian_name: resp, monthly_fee: valor, active: true });
+  state.receitaManual = null; // recalcula automaticamente
+  formStudent.reset();
+  formStudent.classList.remove("open");
+  render();
+
+  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor });
+});
+
+// ---- formulário: nova despesa ----
+
+var toggleExpense = document.getElementById("toggle-expense");
+var formExpense = document.getElementById("form-expense");
+toggleExpense.addEventListener("click", function(){
+  formExpense.classList.toggle("open");
+  if(formExpense.classList.contains("open")) document.getElementById("e-desc").focus();
+});
+document.getElementById("cancel-expense").addEventListener("click", function(){
+  formExpense.classList.remove("open");
+  formExpense.reset();
+});
+formExpense.addEventListener("submit", function(ev){
+  ev.preventDefault();
+  var desc = document.getElementById("e-desc").value.trim();
+  var cat = document.getElementById("e-cat").value.trim();
+  var valor = parseFloat(document.getElementById("e-valor").value);
+  if(!desc || !cat || isNaN(valor)) return;
+
+  state.expenses.push({ id: uid("tmp"), description: desc, category: cat, amount: valor, is_paid: false, month: MONTH, year: YEAR });
+  formExpense.reset();
+  formExpense.classList.remove("open");
+  render();
+
+  insertExpense({ description: desc, category: cat, amount: valor, month: MONTH, year: YEAR });
+});
+
+// ---- carga inicial + sincronização em tempo real ----
+
+async function loadAndRender(){
+  var data = await fetchData(MONTH, YEAR);
+  state.students = data.students || [];
+  state.expenses = data.expenses || [];
+  render();
+}
+
+var syncPill = document.getElementById("sync-pill");
+var syncLabel = document.getElementById("sync-label");
+var footerNote = document.getElementById("footer-note");
+if(isSupabaseEnabled){
+  syncPill.classList.add("on");
+  syncLabel.textContent = "Sincronizado com Supabase";
+  footerNote.textContent = "Dados sincronizados em tempo real entre seus dispositivos.";
+}else{
+  syncPill.classList.add("off");
+  syncLabel.textContent = "Modo local (offline)";
+  footerNote.textContent = "Supabase não configurado — os dados ficam salvos só neste navegador.";
+}
+
+loadAndRender();
+
+subscribeRealtime(function(){
+  loadAndRender(); // outro dispositivo mudou algo (pagou conta, editou valor, novo aluno) — rebusca e redesenha
+});
+</script>
+</body>
+</html>
