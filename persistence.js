@@ -57,9 +57,10 @@ async function fetchActiveStudents() {
 }
 
 // Insere um novo aluno no cadastro global. Devolve a linha salva (com o id
-// real do Supabase) ou null se a gravação falhar.
-export async function insertStudent({ studentName, guardianName, monthlyFee }) {
-  const payload = { student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee, active: true };
+// real do Supabase) ou null se a gravação falhar. userId é o id da sessão
+// ativa (session.user.id) — obrigatório para passar no RLS "own rows".
+export async function insertStudent({ studentName, guardianName, monthlyFee, userId }) {
+  const payload = { student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee, active: true, user_id: userId };
   if (!isSupabaseEnabled) {
     const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
@@ -113,9 +114,10 @@ async function fetchPayments(month, year) {
 
 // Define o status de pagamento de um aluno neste mês/ano (checkbox "Pago" ou
 // edição direta da data). Devolve true se o Supabase confirmou a gravação.
-export async function setStudentPayment(studentId, month, year, isPaid, paymentDate) {
+// userId é o id da sessão ativa — necessário no upsert para passar no RLS.
+export async function setStudentPayment(studentId, month, year, isPaid, paymentDate, userId) {
   const finalDate = isPaid ? (paymentDate || new Date().toISOString().slice(0, 10)) : null;
-  const payload = { student_id: studentId, month, year, is_paid: isPaid, payment_date: finalDate };
+  const payload = { student_id: studentId, month, year, is_paid: isPaid, payment_date: finalDate, user_id: userId };
   if (!isSupabaseEnabled) {
     const state = readLocal();
     upsertLocalPayment(state, studentId, month, year, { is_paid: isPaid, payment_date: finalDate });
@@ -199,9 +201,9 @@ export async function togglePaid(id, isPaid) {
 
 // Insere uma despesa nova. Devolve a linha salva (com o id real do Supabase)
 // ou null se a gravação falhar — a UI deve tratar null como erro visível,
-// nunca manter a linha só no estado local.
-export async function insertExpense({ description, category, amount, dueDate, month, year }) {
-  const payload = { description, category, amount, due_date: dueDate || null, is_paid: false, month, year };
+// nunca manter a linha só no estado local. userId é o id da sessão ativa.
+export async function insertExpense({ description, category, amount, dueDate, month, year, userId }) {
+  const payload = { description, category, amount, due_date: dueDate || null, is_paid: false, month, year, user_id: userId };
   if (!isSupabaseEnabled) {
     const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
@@ -240,11 +242,12 @@ export async function deleteExpense(id) {
 // base completo (BASE_EXPENSES) em UM insert em lote e devolve as linhas já
 // com o id real gerado pelo Supabase. Se a inserção falhar, loga o erro em
 // detalhe e devolve [] (a tela mostra "nenhuma despesa" em vez de fantasmas).
-async function seedBaseExpensesIfEmpty(month, year) {
+// userId é o id da sessão ativa, obrigatório no insert para passar no RLS.
+async function seedBaseExpensesIfEmpty(month, year, userId) {
   const current = await fetchExpenses(month, year);
   if (current.length) return current;
 
-  const toInsert = BASE_EXPENSES.map((e) => ({ ...e, due_date: null, is_paid: false, month, year }));
+  const toInsert = BASE_EXPENSES.map((e) => ({ ...e, due_date: null, is_paid: false, month, year, user_id: userId }));
 
   if (!isSupabaseEnabled) {
     const rows = toInsert.map((e) => ({ id: crypto.randomUUID(), ...e }));
@@ -268,10 +271,11 @@ async function seedBaseExpensesIfEmpty(month, year) {
 
 // Chamada ao trocar de mês, ao carregar a página, e a cada evento realtime:
 // - os alunos ativos são sempre os mesmos, em qualquer mês (cadastro global);
+//   a leitura já vem filtrada por dono pelo RLS — não precisa passar userId aqui;
 // - o status de pagamento de cada aluno vem de student_payments, filtrado por month/year;
-// - despesas: se o mês estiver vazio, o modelo base completo é inserido em lote e a lista
-//   devolvida já vem com os ids reais do Supabase.
-export async function loadMonthData(month, year) {
+// - despesas: se o mês estiver vazio, o modelo base completo é inserido em lote
+//   (por isso o insert PRECISA de userId) e a lista devolvida já vem com os ids reais.
+export async function loadMonthData(month, year, userId) {
   const [students, payments] = await Promise.all([fetchActiveStudents(), fetchPayments(month, year)]);
 
   const paymentByStudent = {};
@@ -282,7 +286,7 @@ export async function loadMonthData(month, year) {
     return { ...s, is_paid: p ? p.is_paid : false, payment_date: p ? p.payment_date : null };
   });
 
-  const expenses = await seedBaseExpensesIfEmpty(month, year);
+  const expenses = await seedBaseExpensesIfEmpty(month, year, userId);
 
   return { students: studentsWithStatus, expenses };
 }

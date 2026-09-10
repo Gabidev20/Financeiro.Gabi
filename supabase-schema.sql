@@ -56,20 +56,39 @@ alter publication supabase_realtime add table public.expenses;
 alter publication supabase_realtime add table public.students;
 alter publication supabase_realtime add table public.student_payments;
 
--- RLS: app pessoal, sem login — a chave anon do client tem acesso total às
--- tabelas. Isso é aceitável para uso próprio, mas qualquer pessoa com a URL
--- do projeto + anon key consegue ler/escrever os dados. Se o painel for
--- compartilhado com terceiros no futuro, troque estas policies por regras
--- baseadas em auth.uid().
 alter table public.expenses enable row level security;
 alter table public.students enable row level security;
 alter table public.student_payments enable row level security;
 
-create policy "allow all - expenses" on public.expenses
-  for all using (true) with check (true);
+-- MIGRAÇÃO (rodada 4) — Login com Supabase Auth
+-- Cada linha passa a pertencer a um usuário (auth.users). O RLS "allow all"
+-- de antes vira "só o dono enxerga/edita as próprias linhas".
 
-create policy "allow all - students" on public.students
-  for all using (true) with check (true);
+drop policy if exists "allow all - expenses" on public.expenses;
+drop policy if exists "allow all - students" on public.students;
+drop policy if exists "allow all - student_payments" on public.student_payments;
 
-create policy "allow all - student_payments" on public.student_payments
-  for all using (true) with check (true);
+alter table public.expenses         add column if not exists user_id uuid references auth.users(id) default auth.uid();
+alter table public.students         add column if not exists user_id uuid references auth.users(id) default auth.uid();
+alter table public.student_payments add column if not exists user_id uuid references auth.users(id) default auth.uid();
+
+create policy "own rows - expenses" on public.expenses
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create policy "own rows - students" on public.students
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create policy "own rows - student_payments" on public.student_payments
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- IMPORTANTE — os dados que já existiam (de antes do login existir, ex.:
+-- Setembro/2026) ficam com user_id nulo e, com a policy nova, INVISÍVEIS pra
+-- todo mundo até você rodar o passo abaixo:
+--
+-- 1. Crie sua conta pelo próprio painel (aba "Criar conta") e confirme o e-mail.
+-- 2. No Supabase: Authentication > Users > copie o "UID" da sua conta.
+-- 3. Rode (trocando o texto entre aspas pelo UID copiado):
+--
+--    update public.students         set user_id = 'COLE-SEU-UID-AQUI' where user_id is null;
+--    update public.expenses         set user_id = 'COLE-SEU-UID-AQUI' where user_id is null;
+--    update public.student_payments set user_id = 'COLE-SEU-UID-AQUI' where user_id is null;
