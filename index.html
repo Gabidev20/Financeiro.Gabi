@@ -330,7 +330,7 @@
   }
   .auth-brand{ text-align:center; margin-bottom:22px; }
   .auth-brand .eyebrow{ margin:0 0 6px; }
-  .auth-brand h1{ font-size:21px; }
+  .auth-brand .auth-subtitle{ font-family:"Fraunces", Georgia, serif; font-size:19px; font-weight:600; color:var(--text); }
   .auth-tabs{
     display:flex; gap:4px; background:var(--surface-alt); border-radius:10px; padding:4px; margin-bottom:20px;
   }
@@ -375,7 +375,7 @@
   <div class="auth-card">
     <div class="auth-brand">
       <p class="eyebrow">Painel financeiro</p>
-      <h1>Aulas de Inglês da Gabi</h1>
+      <p class="auth-subtitle">Acesse seu painel financeiro</p>
     </div>
 
     <div class="auth-tabs">
@@ -431,7 +431,7 @@
         <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20"/><circle cx="17" cy="14.5" r="1.4" fill="currentColor" stroke="none"/></svg></span>
       </div>
       <div class="stat-value num" id="stat-receita">R$ 0,00</div>
-      <div class="stat-note" id="stat-receita-note">0 alunos ativos</div>
+      <div class="stat-note" id="stat-receita-note">0 ativos</div>
     </div>
     <div class="stat-card pendente">
       <div class="stat-top">
@@ -467,7 +467,7 @@
           <h2 class="editable" id="revenue-title" contenteditable="true" spellcheck="false">Alunos &amp; mensalidades</h2>
           <svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </div>
-        <span class="count" id="alunos-count">0 alunos</span>
+        <span class="count" id="alunos-count">0</span>
       </div>
       <div class="panel-body">
         <div class="table-wrap">
@@ -703,8 +703,8 @@ function render(){
       '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
       '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
-  }).join("") : '<tr class="empty-row"><td colspan="5">Nenhum aluno cadastrado ainda.</td></tr>';
-  document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " aluno" : " alunos");
+  }).join("") : '<tr class="empty-row"><td colspan="5">Nenhum registro cadastrado ainda.</td></tr>';
+  document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " item" : " itens");
 
   var eBody = document.getElementById("expenses-body");
   eBody.innerHTML = state.expenses.length ? state.expenses.map(function(e){
@@ -734,7 +734,7 @@ function updateTotals(){
   var receitaAtual = state.receitaManual != null ? state.receitaManual : receitaCalc;
   document.getElementById("receita-input").value = receitaAtual.toFixed(2);
   document.getElementById("stat-receita").textContent = brl(receitaAtual);
-  document.getElementById("stat-receita-note").textContent = state.students.length + (state.students.length === 1 ? " aluno ativo" : " alunos ativos");
+  document.getElementById("stat-receita-note").textContent = state.students.length + (state.students.length === 1 ? " ativo" : " ativos");
 
   var recebido = state.students.filter(function(s){ return s.is_paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
   var aReceber = state.students.filter(function(s){ return !s.is_paid; }).reduce(function(a,s){ return a + Number(s.monthly_fee); }, 0);
