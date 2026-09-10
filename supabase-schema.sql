@@ -96,3 +96,33 @@ create policy "own rows - student_payments" on public.student_payments
 --    update public.students         set user_id = 'COLE-SEU-UID-AQUI' where user_id is null;
 --    update public.expenses         set user_id = 'COLE-SEU-UID-AQUI' where user_id is null;
 --    update public.student_payments set user_id = 'COLE-SEU-UID-AQUI' where user_id is null;
+
+-- MIGRAÇÃO (rodada 6) — personalização de workspace por usuário
+create table if not exists public.user_settings (
+  user_id               uuid primary key references auth.users(id) on delete cascade,
+  workspace_title       text not null default 'Meu Controle Financeiro',
+  workspace_subtitle    text not null default '',
+  revenue_section_title text not null default 'Receitas & Clientes',
+  item_label            text not null default 'Cliente / Serviço',
+  created_at            timestamptz not null default now()
+);
+
+alter publication supabase_realtime add table public.user_settings;
+
+alter table public.user_settings enable row level security;
+
+create policy "own row - user_settings" on public.user_settings
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Preserva a identidade atual da sua conta (troque o UID pelo mesmo que você
+-- já usou nas migrações anteriores) — sem isso, ela nasceria com os rótulos
+-- neutros como qualquer conta nova:
+insert into public.user_settings (user_id, workspace_title, workspace_subtitle, revenue_section_title, item_label)
+values (
+  'COLE-SEU-UID-AQUI',
+  'Aulas de Inglês da Gabi',
+  'Mensalidades de alunos e despesas do mês, com baixa em tempo real.',
+  'Alunos & mensalidades',
+  'Aluno'
+)
+on conflict (user_id) do nothing;

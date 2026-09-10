@@ -10,10 +10,11 @@
 // id temporário local ou assumir sucesso sem checar.
 //
 // Modelo:
+// - user_settings: 1 linha por usuário — nome do workspace e rótulos da tela.
 // - students: cadastro global de alunos — não muda de mês.
 // - student_payments: status de pagamento por aluno/mês/ano (1 linha por combinação).
-// - expenses: despesas por mês/ano — o modelo base (fixas + variáveis) é
-//   inserido automaticamente na primeira visita a um mês vazio.
+// - expenses: despesas por mês/ano — despesas fixas são clonadas do histórico
+//   do próprio usuário na primeira visita a um mês vazio.
 
 import { supabase, isSupabaseEnabled } from "./supabaseClient.js";
 
@@ -38,6 +39,85 @@ function upsertLocalPayment(state, studentId, month, year, patch) {
 }
 function logSupabaseError(op, payload, error) {
   console.error("[persistence] " + op + " falhou — confira RLS/schema no Supabase", { payload, error });
+}
+
+// ---- configurações do workspace (por usuário) ----
+
+const DEFAULT_SETTINGS = {
+  workspace_title: "Meu Controle Financeiro",
+  workspace_subtitle: "",
+  revenue_section_title: "Receitas & Clientes",
+  item_label: "Cliente / Serviço",
+};
+
+// Conta original do painel — se um dia rodar sem o backfill manual de SQL
+// (ou num ambiente novo), o primeiro acesso já nasce com a identidade certa
+// em vez dos rótulos neutros de conta nova.
+const KNOWN_ACCOUNT_DEFAULTS = {
+  "fabiagabriela13@gmail.com": {
+    workspace_title: "Aulas de Inglês da Gabi",
+    workspace_subtitle: "Mensalidades de alunos e despesas do mês, com baixa em tempo real.",
+    revenue_section_title: "Alunos & mensalidades",
+    item_label: "Aluno",
+  },
+};
+
+// Busca as configurações da conta logada. Se ainda não existir nenhuma linha
+// (primeiro acesso do usuário), cria com os valores padrão e devolve já
+// criada — neutros pra qualquer conta nova, ou os de KNOWN_ACCOUNT_DEFAULTS
+// se o e-mail bater com uma conta conhecida. Um upsert simples não serve
+// aqui: sobrescreveria os valores já personalizados toda vez que a página
+// carrega — por isso é select, e só insere se realmente não existir nada.
+export async function getOrCreateSettings(userId, email) {
+  const defaults = (email && KNOWN_ACCOUNT_DEFAULTS[email]) || DEFAULT_SETTINGS;
+
+  if (!isSupabaseEnabled) {
+    const state = readLocal();
+    if (!state.settings) {
+      state.settings = { user_id: userId, ...defaults };
+      writeLocal(state);
+    }
+    return state.settings;
+  }
+  try {
+    const { data, error } = await supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle();
+    if (error) { logSupabaseError("getOrCreateSettings", { userId }, error); return { user_id: userId, ...defaults }; }
+    if (data) return data;
+
+    const { data: created, error: insertError } = await supabase
+      .from("user_settings")
+      .insert({ user_id: userId, ...defaults })
+      .select()
+      .single();
+    if (insertError) { logSupabaseError("getOrCreateSettings:insert", { userId }, insertError); return { user_id: userId, ...defaults }; }
+    return created;
+  } catch (err) {
+    logSupabaseError("getOrCreateSettings", { userId }, err);
+    return { user_id: userId, ...defaults };
+  }
+}
+
+// Atualiza um ou mais rótulos (título, subtítulo, nome da seção, nome do
+// item) ao sair do campo editável. Devolve true se o Supabase confirmou.
+export async function updateSettings(userId, patch) {
+  if (!isSupabaseEnabled) {
+    const state = readLocal();
+    state.settings = { ...(state.settings || { user_id: userId, ...DEFAULT_SETTINGS }), ...patch };
+    writeLocal(state);
+    return true;
+  }
+  try {
+    const { data, error } = await supabase.from("user_settings").update(patch).eq("user_id", userId).select();
+    if (error) { logSupabaseError("updateSettings", { userId, patch }, error); return false; }
+    if (!data || !data.length) {
+      console.warn("[persistence] updateSettings não alterou nenhuma linha (id inexistente ou bloqueado por RLS)", { userId, patch });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    logSupabaseError("updateSettings", { userId, patch }, err);
+    return false;
+  }
 }
 
 // ---- alunos (cadastro global) ----
@@ -352,6 +432,7 @@ export function subscribeRealtime(onChange) {
     .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "students" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "student_payments" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "user_settings" }, onChange)
     .subscribe((status, err) => {
       if (err) console.error("[persistence] falha ao assinar o realtime", err);
     });

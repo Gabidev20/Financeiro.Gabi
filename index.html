@@ -130,6 +130,26 @@
   .sync-pill.off{ color:var(--warning); background:var(--warning-soft); border-color:transparent; }
   .sync-pill.off .led{ background:var(--warning); }
 
+  /* rótulos editáveis (título, seção de receitas, nome do item) */
+  .editable-wrap{ display:inline-flex; align-items:center; gap:8px; }
+  div.editable-wrap{ display:flex; }
+  .editable{
+    outline:none; border-radius:6px; padding:1px 6px; margin:-1px -6px; cursor:text;
+    transition: background-color .15s ease;
+  }
+  .editable:hover{ background:var(--surface-alt); }
+  .editable:focus{ background:var(--surface-alt); box-shadow:0 0 0 2px var(--accent); }
+  .edit-pencil{
+    width:14px; height:14px; color:var(--text-muted); opacity:0; flex:none; cursor:text;
+    transition:opacity .15s ease;
+  }
+  .editable-wrap:hover .edit-pencil{ opacity:1; }
+  .saved-flash{
+    font-size:10.5px; font-weight:700; color:var(--positive); background:var(--positive-soft);
+    padding:2px 8px; border-radius:999px; opacity:0; transition:opacity .2s ease; white-space:nowrap; flex:none;
+  }
+  .saved-flash.show{ opacity:1; }
+
   /* stat grid */
   .stat-grid{
     display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:26px;
@@ -386,8 +406,14 @@
   <div class="top">
     <div>
       <p class="eyebrow">Painel financeiro</p>
-      <h1>Aulas de Inglês da Gabi</h1>
-      <p class="sub">Mensalidades de alunos e despesas do mês, com baixa em tempo real.</p>
+      <div class="editable-wrap">
+        <h1 class="editable" id="ws-title" contenteditable="true" spellcheck="false">Aulas de Inglês da Gabi</h1>
+        <svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </div>
+      <div class="editable-wrap">
+        <p class="sub editable" id="ws-subtitle" contenteditable="true" spellcheck="false">Mensalidades de alunos e despesas do mês, com baixa em tempo real.</p>
+        <svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </div>
       <span class="sync-pill" id="sync-pill"><span class="led"></span><span id="sync-label">Verificando conexão…</span></span>
     </div>
     <div class="month-nav">
@@ -436,14 +462,20 @@
     <!-- ENTRADAS -->
     <section class="panel">
       <div class="panel-head">
-        <h2>Alunos &amp; mensalidades</h2>
+        <div class="editable-wrap">
+          <h2 class="editable" id="revenue-title" contenteditable="true" spellcheck="false">Alunos &amp; mensalidades</h2>
+          <svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </div>
         <span class="count" id="alunos-count">0 alunos</span>
       </div>
       <div class="panel-body">
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Aluno</th><th class="num">Mensalidade</th><th>Data pgto</th><th class="chk">Pago</th><th class="chk"></th></tr>
+              <tr>
+                <th><span class="editable-wrap"><span class="editable" id="item-label-th" contenteditable="true" spellcheck="false">Aluno</span><svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span></th>
+                <th class="num">Mensalidade</th><th>Data pgto</th><th class="chk">Pago</th><th class="chk"></th>
+              </tr>
             </thead>
             <tbody id="students-body"><tr class="empty-row"><td colspan="5">Carregando alunos…</td></tr></tbody>
           </table>
@@ -468,8 +500,8 @@
         <button class="add-toggle" id="toggle-student" type="button">+ Novo aluno</button>
         <form class="add-form" id="form-student">
           <div class="fields">
-            <div class="field"><label for="s-aluno">Aluno</label><input id="s-aluno" required placeholder="Ex.: Manu"></div>
-            <div class="field"><label for="s-resp">Responsável</label><input id="s-resp" required placeholder="Ex.: Débora"></div>
+            <div class="field"><label for="s-aluno" id="item-label-form">Aluno</label><input id="s-aluno" required placeholder="Nome"></div>
+            <div class="field"><label for="s-resp">Detalhe (opcional)</label><input id="s-resp" placeholder="Ex.: responsável, dia da semana…"></div>
             <div class="field"><label for="s-valor">Mensalidade (R$)</label><input id="s-valor" type="number" step="0.01" min="0" required placeholder="180"></div>
           </div>
           <div class="actions">
@@ -509,7 +541,7 @@
             <div class="field"><label for="e-desc">Descrição</label><input id="e-desc" required placeholder="Ex.: Internet"></div>
             <div class="field">
               <label for="e-cat">Categoria</label>
-              <input id="e-cat" required placeholder="Ex.: Assinaturas" list="cat-list">
+              <input id="e-cat" required placeholder="Ex.: Pix, Aluguel, Fornecedores…" list="cat-list">
               <datalist id="cat-list"></datalist>
             </div>
             <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="text" inputmode="numeric" maxlength="5" placeholder="DD/MM" required></div>
@@ -534,15 +566,18 @@
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
-  removeStudent, setStudentPayment, loadMonthData, subscribeRealtime
+  removeStudent, setStudentPayment, loadMonthData, subscribeRealtime,
+  getOrCreateSettings, updateSettings
 } from "./persistence.js";
 import { getSession, signIn, signUp, signOut, onAuthChange } from "./auth.js";
 
 var MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+var QUICK_CATEGORIES = ["Pix", "Cartão de crédito", "Boleto", "Dinheiro"]; // sugestões — o campo aceita qualquer texto digitado
 var currentMonth = 9;
 var currentYear = 2026;
 var todayIso = new Date().toISOString().slice(0, 10);
 var currentUserId = null;
+var currentSettings = null;
 var unsubscribeRealtime = null;
 
 var state = { students: [], expenses: [], receitaManual: null };
@@ -562,6 +597,69 @@ function showError(message){
 function sumStudents(){
   return state.students.reduce(function(acc, s){ return acc + Number(s.monthly_fee || 0); }, 0);
 }
+
+// ---- rótulos personalizáveis do workspace (título, seção, nome do item) ----
+
+function flashSaved(afterEl){
+  var badge = document.createElement("span");
+  badge.className = "saved-flash";
+  badge.textContent = "Salvo";
+  afterEl.insertAdjacentElement("afterend", badge);
+  requestAnimationFrame(function(){ badge.classList.add("show"); });
+  setTimeout(function(){
+    badge.classList.remove("show");
+    setTimeout(function(){ badge.remove(); }, 250);
+  }, 1300);
+}
+
+// Só atualiza o texto se o usuário não estiver editando esse campo agora —
+// evita que um evento realtime substitua o que ele está digitando.
+function setEditableText(el, value){
+  if(document.activeElement === el) return;
+  el.textContent = value || "";
+}
+
+function renderSettings(settings){
+  currentSettings = settings;
+  setEditableText(document.getElementById("ws-title"), settings.workspace_title);
+  setEditableText(document.getElementById("ws-subtitle"), settings.workspace_subtitle);
+  setEditableText(document.getElementById("revenue-title"), settings.revenue_section_title);
+  setEditableText(document.getElementById("item-label-th"), settings.item_label);
+  document.getElementById("item-label-form").textContent = settings.item_label;
+  document.getElementById("toggle-student").textContent = "+ Novo " + settings.item_label;
+}
+
+// Liga um elemento contenteditable a um campo de user_settings: Enter
+// confirma e sai do campo; blur salva (só se o texto realmente mudou e não
+// ficou vazio — texto vazio restaura o valor anterior em vez de gravar "").
+function wireEditable(el, field, onSaved){
+  el.addEventListener("keydown", function(ev){
+    if(ev.key === "Enter"){ ev.preventDefault(); el.blur(); }
+  });
+  el.addEventListener("blur", function(){
+    var value = el.textContent.trim();
+    if(!value){ el.textContent = currentSettings[field] || ""; return; }
+    if(value === currentSettings[field]) return;
+    var previous = currentSettings[field];
+    currentSettings[field] = value;
+    if(onSaved) onSaved(value);
+    updateSettings(currentUserId, { [field]: value }).then(function(ok){
+      if(ok){ flashSaved(el); return; }
+      currentSettings[field] = previous;
+      el.textContent = previous;
+      if(onSaved) onSaved(previous);
+      showError("Não foi possível salvar. Veja o console (F12) para detalhes.");
+    });
+  });
+}
+
+wireEditable(document.getElementById("ws-title"), "workspace_title");
+wireEditable(document.getElementById("ws-subtitle"), "workspace_subtitle");
+wireEditable(document.getElementById("revenue-title"), "revenue_section_title");
+wireEditable(document.getElementById("item-label-th"), "item_label", function(value){
+  document.getElementById("item-label-form").textContent = value;
+  document.getElementById("toggle-student").textContent = "+ Novo " + value;
+});
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, function(ch){
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
@@ -597,7 +695,7 @@ function render(){
   var sBody = document.getElementById("students-body");
   sBody.innerHTML = state.students.length ? state.students.map(function(s){
     return '<tr class="' + (s.is_paid ? "paid" : "") + '">' +
-      '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong><span>' + escapeHtml(s.guardian_name) + '</span></td>' +
+      '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong>' + (s.guardian_name ? '<span>' + escapeHtml(s.guardian_name) + '</span>' : '') + '</td>' +
       '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
       '<td><input type="text" inputmode="numeric" maxlength="5" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
@@ -620,7 +718,8 @@ function render(){
   }).join("") : '<tr class="empty-row"><td colspan="6">Nenhuma despesa cadastrada em ' + MONTH_NAMES[currentMonth-1] + '/' + currentYear + '.</td></tr>';
   document.getElementById("despesas-count").textContent = state.expenses.length + (state.expenses.length === 1 ? " conta" : " contas");
 
-  var cats = Array.from(new Set(state.expenses.map(function(e){ return e.category; })));
+  var usedCats = state.expenses.map(function(e){ return e.category; });
+  var cats = Array.from(new Set(QUICK_CATEGORIES.concat(usedCats)));
   document.getElementById("cat-list").innerHTML = cats.map(function(c){ return '<option value="' + escapeHtml(c) + '">'; }).join("");
 
   updateTotals();
@@ -1044,16 +1143,18 @@ function showDashboard(session){
   currentUserId = session.user.id;
   document.getElementById("user-email").textContent = session.user.email;
 
+  getOrCreateSettings(currentUserId, session.user.email).then(renderSettings);
   goToMonth(currentMonth, currentYear);
 
   if(unsubscribeRealtime) unsubscribeRealtime();
   unsubscribeRealtime = subscribeRealtime(function(){
-    // outro dispositivo mudou algo (pagou conta, editou valor, novo aluno) — rebusca o mês atual e redesenha
+    // outro dispositivo mudou algo (pagou conta, editou valor, novo aluno, rótulo) — rebusca tudo e redesenha
     loadMonthData(currentMonth, currentYear, currentUserId).then(function(data){
       state.students = data.students || [];
       state.expenses = data.expenses || [];
       render();
     });
+    getOrCreateSettings(currentUserId, session.user.email).then(renderSettings);
   });
 }
 
@@ -1061,6 +1162,7 @@ function showAuthScreen(){
   dashboard.hidden = true;
   authScreen.hidden = false;
   currentUserId = null;
+  currentSettings = null;
   formLogin.reset();
   formSignup.reset();
   setAuthMessage("");
@@ -1072,6 +1174,7 @@ if(!isSupabaseEnabled){
   // sem Supabase configurado não há como logar — o painel roda em modo local direto
   dashboard.hidden = false;
   document.querySelector(".user-bar").hidden = true;
+  getOrCreateSettings(null).then(renderSettings);
   goToMonth(currentMonth, currentYear);
 }else{
   getSession().then(function(session){
