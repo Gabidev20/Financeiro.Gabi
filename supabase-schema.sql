@@ -164,3 +164,8 @@ alter table public.students alter column year set not null;
 alter table public.students drop column if exists active;
 
 drop table if exists public.student_payments;
+
+-- MIGRAÇÃO (rodada 9) — cor da categoria (seletor de pílulas no formulário de
+-- despesa) e parcelamento (as parcelas geradas são despesas comuns, uma por
+-- mês, sem coluna nova — só a descrição ganha o sufixo "(i/N)").
+alter table public.expenses add column if not exists category_color text;

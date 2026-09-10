@@ -331,8 +331,11 @@ export async function togglePaid(id, isPaid) {
 // nunca manter a linha só no estado local. userId é o id da sessão ativa.
 // isFixed marca a despesa para ser clonada automaticamente todo mês (ver
 // cloneFixedExpensesIfEmpty) — despesas não fixas pertencem só a este mês.
-export async function insertExpense({ description, category, amount, dueDate, month, year, userId, isFixed }) {
-  const payload = { description, category, amount, due_date: dueDate || null, is_paid: false, is_fixed: !!isFixed, month, year, user_id: userId };
+export async function insertExpense({ description, category, amount, dueDate, month, year, userId, isFixed, categoryColor }) {
+  const payload = {
+    description, category, amount, due_date: dueDate || null, is_paid: false, is_fixed: !!isFixed,
+    category_color: categoryColor || null, month, year, user_id: userId,
+  };
   if (!isSupabaseEnabled) {
     const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
@@ -346,6 +349,57 @@ export async function insertExpense({ description, category, amount, dueDate, mo
     return data;
   } catch (err) {
     logSupabaseError("insertExpense", payload, err);
+    return null;
+  }
+}
+
+// Move um dia (1-31) para o mês/ano informado, ajustando para o último dia
+// se o mês for mais curto (ex.: dia 31 caindo num mês de 30 dias).
+function dayToIsoForMonth(day, month, year) {
+  if (!day) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  const clamped = Math.min(Math.max(1, Math.round(day)), lastDay);
+  return year + "-" + String(month).padStart(2, "0") + "-" + String(clamped).padStart(2, "0");
+}
+
+// Gera uma despesa parcelada: uma linha por parcela, cada uma no seu
+// mês/ano subsequente, com "(i/N)" no fim da descrição e is_fixed sempre
+// false (a série tem fim — não deve entrar na clonagem de fixas). Devolve
+// todas as linhas criadas (com id real) ou null se a gravação falhar.
+export async function insertInstallments({ description, category, categoryColor, amount, dueDay, month, year, installments, userId }) {
+  const count = Math.max(2, Math.min(60, Math.round(installments) || 2));
+  const rows = [];
+  let m = month, y = year;
+  for (let i = 1; i <= count; i++) {
+    rows.push({
+      description: description + " (" + i + "/" + count + ")",
+      category,
+      category_color: categoryColor || null,
+      amount,
+      due_date: dayToIsoForMonth(dueDay, m, y),
+      is_paid: false,
+      is_fixed: false,
+      month: m,
+      year: y,
+      user_id: userId,
+    });
+    m += 1;
+    if (m > 12) { m = 1; y += 1; }
+  }
+
+  if (!isSupabaseEnabled) {
+    const inserted = rows.map((r) => ({ id: crypto.randomUUID(), ...r }));
+    const state = readLocal();
+    state.expenses = (state.expenses || []).concat(inserted);
+    writeLocal(state);
+    return inserted;
+  }
+  try {
+    const { data, error } = await supabase.from("expenses").insert(rows).select();
+    if (error) { logSupabaseError("insertInstallments", { rows }, error); return null; }
+    return data || [];
+  } catch (err) {
+    logSupabaseError("insertInstallments", { rows }, err);
     return null;
   }
 }

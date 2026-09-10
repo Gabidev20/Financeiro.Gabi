@@ -215,6 +215,48 @@
     display:inline-block; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
     background:var(--surface-alt); color:var(--text-muted); white-space:nowrap;
   }
+  .cat-chip-color{ background:var(--chip-bg-light); color:var(--chip-text-light); }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]) .cat-chip-color{ background:var(--chip-bg-dark); color:var(--chip-text-dark); }
+  }
+  :root[data-theme="dark"] .cat-chip-color{ background:var(--chip-bg-dark); color:var(--chip-text-dark); }
+
+  .color-picker{ display:flex; gap:8px; flex-wrap:wrap; padding-top:4px; }
+  .color-picker-inline{ margin-top:6px; }
+  .color-pill{
+    width:22px; height:22px; border-radius:50%; border:2px solid transparent; cursor:pointer; padding:0;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08); flex:none;
+  }
+  .color-pill:hover{ transform:scale(1.12); }
+  .color-pill.selected{ border-color:var(--text); }
+
+  .edit-input{
+    width:100%; padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface);
+    color:var(--text); font-size:13px;
+  }
+  .edit-input:focus{ outline:none; border-color:var(--accent); }
+  .editing-row{ background:var(--surface-alt); }
+  .row-actions{ display:inline-flex; gap:2px; align-items:center; }
+  .row-edit, .row-save, .row-cancel{
+    border:none; background:none; cursor:pointer; padding:4px; border-radius:6px; line-height:0;
+  }
+  .row-edit{ color:var(--text-muted); }
+  .row-edit:hover{ color:var(--accent-strong); background:var(--accent-soft); }
+  .row-save{ color:var(--positive); }
+  .row-save:hover{ background:var(--positive-soft); }
+  .row-cancel{ color:var(--critical); }
+  .row-cancel:hover{ background:var(--critical-soft); }
+  .row-edit svg, .row-save svg, .row-cancel svg{ width:13px; height:13px; display:block; }
+  .chk-actions{ width:60px; }
+
+  .panel-head-right{ display:flex; align-items:center; gap:10px; }
+  .panel-collapse-btn{
+    display:none; border:none; background:none; color:var(--text-muted); cursor:pointer;
+    padding:4px; border-radius:6px; line-height:0;
+  }
+  .panel-collapse-btn:hover{ background:var(--surface-alt); color:var(--text); }
+  .chevron{ width:16px; height:16px; transition:transform .25s ease; display:block; }
+  .panel.collapsed .chevron{ transform:rotate(-90deg); }
   .fixed-badge{
     display:inline-block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
     padding:2px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent-strong);
@@ -361,6 +403,15 @@
     .grid{ grid-template-columns:1fr; }
     .stat-grid{ grid-template-columns:repeat(2, 1fr); }
     .add-form .fields{ grid-template-columns:1fr; }
+    .panel-collapse-btn{ display:inline-flex; align-items:center; justify-content:center; }
+    .panel-body{
+      overflow:hidden; max-height:4000px; opacity:1;
+      transition:max-height .3s ease, padding .3s ease, opacity .2s ease;
+    }
+    .panel.collapsed .panel-body{ max-height:0; padding-top:0; padding-bottom:0; opacity:0; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .panel-body, .chevron{ transition:none; }
   }
   @media (prefers-reduced-motion: no-preference){
     .stat-card, .panel{ transition: box-shadow .15s ease; }
@@ -471,7 +522,10 @@
           <h2 class="editable" id="revenue-title" contenteditable="true" spellcheck="false">Alunos &amp; mensalidades</h2>
           <svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </div>
-        <span class="count" id="alunos-count">0</span>
+        <div class="panel-head-right">
+          <span class="count" id="alunos-count">0</span>
+          <button type="button" class="panel-collapse-btn" data-panel-toggle aria-label="Recolher ou expandir"><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
       </div>
       <div class="panel-body">
         <div class="table-wrap">
@@ -522,7 +576,10 @@
     <section class="panel">
       <div class="panel-head">
         <h2>Despesas do mês</h2>
-        <span class="count" id="despesas-count">0 contas</span>
+        <div class="panel-head-right">
+          <span class="count" id="despesas-count">0 contas</span>
+          <button type="button" class="panel-collapse-btn" data-panel-toggle aria-label="Recolher ou expandir"><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
       </div>
       <div class="panel-body">
         <div class="table-wrap">
@@ -552,8 +609,11 @@
             </div>
             <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="text" inputmode="numeric" maxlength="5" placeholder="DD/MM" required></div>
             <div class="field"><label for="e-valor">Valor (R$)</label><input id="e-valor" type="number" step="0.01" min="0" required placeholder="60"></div>
+            <div class="field"><label>Cor da categoria</label><div class="color-picker" id="e-color-picker"></div></div>
           </div>
           <label class="checkbox-field"><input type="checkbox" id="e-fixed"> Despesa fixa — repetir todos os meses</label>
+          <label class="checkbox-field" id="e-installment-wrap" hidden><input type="checkbox" id="e-installment"> Compra parcelada?</label>
+          <div class="field" id="e-installment-count-field" hidden><label for="e-installment-count">Número de parcelas</label><input id="e-installment-count" type="number" min="2" max="60" placeholder="ex: 3, 6, 12"></div>
           <div class="actions">
             <button type="button" class="btn btn-ghost" id="cancel-expense">Cancelar</button>
             <button type="submit" class="btn btn-primary">Adicionar despesa</button>
@@ -573,7 +633,7 @@ import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
   removeStudent, toggleStudentPaid, updateStudent, loadMonthData, subscribeRealtime,
-  getOrCreateSettings, updateSettings
+  getOrCreateSettings, updateSettings, insertInstallments
 } from "./persistence.js";
 import { getSession, signIn, signUp, signOut, onAuthChange } from "./auth.js";
 
@@ -585,6 +645,18 @@ var todayIso = new Date().toISOString().slice(0, 10);
 var currentUserId = null;
 var currentSettings = null;
 var unsubscribeRealtime = null;
+var editingExpenseId = null;
+var draftColors = {}; // cor escolhida na hora, por id de despesa, enquanto a linha está em edição
+
+var CATEGORY_COLORS = [
+  { hex: "#3b82f6", name: "Azul",     lightBg: "#dbe9fe", lightText: "#1d4ed8", darkBg: "#14203a", darkText: "#93bbfd" },
+  { hex: "#10b981", name: "Verde",    lightBg: "#d7f5e9", lightText: "#0a7a53", darkBg: "#0f2b23", darkText: "#6fe3b4" },
+  { hex: "#ef4444", name: "Vermelho", lightBg: "#fbdede", lightText: "#b91c1c", darkBg: "#341616", darkText: "#f2a29c" },
+  { hex: "#f59e0b", name: "Amarelo",  lightBg: "#fdedc8", lightText: "#92620a", darkBg: "#332404", darkText: "#f3c568" },
+  { hex: "#8b5cf6", name: "Roxo",     lightBg: "#ece3fd", lightText: "#6d28d9", darkBg: "#221935", darkText: "#c4a5fb" },
+  { hex: "#6b7280", name: "Cinza",    lightBg: "#e6e8eb", lightText: "#3f4650", darkBg: "#23262a", darkText: "#c7ccd1" },
+];
+var newExpenseColor = null; // cor escolhida no formulário de "+ Nova despesa"
 
 var state = { students: [], expenses: [], receitaManual: null };
 var syncTimers = {};
@@ -666,6 +738,14 @@ wireEditable(document.getElementById("item-label-th"), "item_label", function(va
   document.getElementById("item-label-form").textContent = value;
   document.getElementById("toggle-student").textContent = "+ Novo " + value;
 });
+
+// Accordion mobile/tablet (@media max-width:900px) — acima disso o botão fica
+// oculto via CSS e os painéis sempre ficam expandidos, mesmo com a classe.
+Array.prototype.forEach.call(document.querySelectorAll("[data-panel-toggle]"), function(btn){
+  btn.addEventListener("click", function(){
+    btn.closest(".panel").classList.toggle("collapsed");
+  });
+});
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, function(ch){
     return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
@@ -673,6 +753,49 @@ function escapeHtml(str){
 }
 function trashIcon(){
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6"/></svg>';
+}
+function editPencilIcon(){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+}
+function checkIcon(){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+}
+function xIcon(){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+}
+// Regex escapado por código (em vez de colar os caracteres de acento direto
+// no arquivo) pra não depender da codificação do editor/terminal ao salvar.
+var DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
+function isCreditCardCategory(category){
+  var n = String(category || "").normalize("NFD").replace(DIACRITICS_RE, "").toLowerCase();
+  return n.indexOf("cartao") !== -1;
+}
+// Desenha as pílulas de cor. targetAttr vira o nome do data-attribute usado
+// para identificar o alvo do clique (form novo, ou id da despesa em edição).
+function colorPillsHtml(targetAttr, targetId, selectedHex){
+  return CATEGORY_COLORS.map(function(c){
+    var sel = (selectedHex && c.hex.toLowerCase() === selectedHex.toLowerCase()) ? " selected" : "";
+    return '<button type="button" class="color-pill' + sel + '" style="background:' + c.hex + '" data-color="' + c.hex + '" data-' + targetAttr + '="' + targetId + '" aria-label="' + c.name + '"></button>';
+  }).join("");
+}
+function selectColorPill(pickerEl, hex){
+  if(!pickerEl) return;
+  Array.prototype.forEach.call(pickerEl.querySelectorAll(".color-pill"), function(p){
+    p.classList.toggle("selected", hex && p.getAttribute("data-color").toLowerCase() === hex.toLowerCase());
+  });
+}
+function categoryChipHtml(category, colorHex){
+  var swatch = CATEGORY_COLORS.find(function(c){ return colorHex && c.hex.toLowerCase() === colorHex.toLowerCase(); });
+  if(!swatch) return '<span class="cat-chip">' + escapeHtml(category) + '</span>';
+  var style = '--chip-bg-light:' + swatch.lightBg + ';--chip-text-light:' + swatch.lightText + ';' +
+              '--chip-bg-dark:' + swatch.darkBg + ';--chip-text-dark:' + swatch.darkText + ';';
+  return '<span class="cat-chip cat-chip-color" style="' + style + '">' + escapeHtml(category) + '</span>';
+}
+// Lê só o dígito do dia (ex.: de "04/09" devolve 4) — usado pra repetir o
+// mesmo dia de vencimento nas parcelas dos meses seguintes.
+function extractDayNumber(text){
+  var m = String(text || "").trim().match(/^(\d{1,2})/);
+  return m ? parseInt(m[1], 10) : null;
 }
 // yyyy-mm-dd -> dd/mm
 function formatShortDate(iso){
@@ -696,6 +819,15 @@ function parseDayFromInput(text, month, year){
   day = Math.min(day, lastDay);
   return year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
 }
+// Cópia ordenada por vencimento (dia 01 -> 31); sem vencimento, ou formato
+// que não virou data, fica no final. state.expenses em si não é reordenado.
+function expensesSortedByDueDate(){
+  return state.expenses.slice().sort(function(a, b){
+    var da = a.due_date || "9999-99-99";
+    var db = b.due_date || "9999-99-99";
+    return da < db ? -1 : (da > db ? 1 : 0);
+  });
+}
 
 function render(){
   var sBody = document.getElementById("students-body");
@@ -711,15 +843,32 @@ function render(){
   document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " item" : " itens");
 
   var eBody = document.getElementById("expenses-body");
-  eBody.innerHTML = state.expenses.length ? state.expenses.map(function(e){
+  var sortedExpenses = expensesSortedByDueDate();
+  eBody.innerHTML = sortedExpenses.length ? sortedExpenses.map(function(e){
     var status = dueStatus(e);
-    return '<tr class="' + (e.is_paid ? "paid" : "") + '">' +
-      '<td class="desc">' + escapeHtml(e.description) + (e.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '') + '</td>' +
-      '<td><span class="cat-chip">' + escapeHtml(e.category) + '</span></td>' +
+    var isEditing = e.id === editingExpenseId;
+
+    var descCell = isEditing
+      ? '<input type="text" class="edit-input" data-edit-desc="' + e.id + '" value="' + escapeHtml(e.description) + '" placeholder="Descrição">'
+      : escapeHtml(e.description) + (e.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '');
+
+    var draftColor = Object.prototype.hasOwnProperty.call(draftColors, e.id) ? draftColors[e.id] : e.category_color;
+    var catCell = isEditing
+      ? '<input type="text" class="edit-input" data-edit-cat="' + e.id + '" value="' + escapeHtml(e.category) + '" list="cat-list">' +
+        '<div class="color-picker color-picker-inline">' + colorPillsHtml("color-edit", e.id, draftColor) + '</div>'
+      : categoryChipHtml(e.category, e.category_color);
+
+    var actionCell = isEditing
+      ? '<span class="row-actions"><button class="row-save" type="button" data-save-expense="' + e.id + '" aria-label="Salvar alterações">' + checkIcon() + '</button><button class="row-cancel" type="button" data-cancel-expense="' + e.id + '" aria-label="Cancelar edição">' + xIcon() + '</button></span>'
+      : '<span class="row-actions"><button class="row-edit" type="button" data-open-edit="' + e.id + '" aria-label="Editar ' + escapeHtml(e.description) + '">' + editPencilIcon() + '</button><button class="row-del" data-remove-expense="' + e.id + '" aria-label="Remover ' + escapeHtml(e.description) + '">' + trashIcon() + '</button></span>';
+
+    return '<tr class="' + (e.is_paid ? "paid" : "") + (isEditing ? " editing-row" : "") + '" data-expense-row="' + e.id + '">' +
+      '<td class="desc">' + descCell + '</td>' +
+      '<td>' + catCell + '</td>' +
       '<td><input type="text" inputmode="numeric" maxlength="5" class="due-input' + (status ? " " + status : "") + '" data-edit-due="' + e.id + '" value="' + (e.due_date ? formatShortDate(e.due_date) : "") + '" placeholder="DD/MM" aria-label="Vencimento de ' + escapeHtml(e.description) + '"></td>' +
       '<td class="num"><span class="value-edit"><span>R$</span><input type="number" step="0.01" min="0" class="value-input" data-edit-expense="' + e.id + '" value="' + Number(e.amount).toFixed(2) + '" aria-label="Valor de ' + escapeHtml(e.description) + '"></span></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-expense="' + e.id + '" ' + (e.is_paid ? "checked" : "") + ' aria-label="Marcar ' + escapeHtml(e.description) + ' como pago"></td>' +
-      '<td class="chk"><button class="row-del" data-remove-expense="' + e.id + '" aria-label="Remover ' + escapeHtml(e.description) + '">' + trashIcon() + '</button></td>' +
+      '<td class="chk chk-actions">' + actionCell + '</td>' +
       '</tr>';
   }).join("") : '<tr class="empty-row"><td colspan="6">Nenhuma despesa cadastrada em ' + MONTH_NAMES[currentMonth-1] + '/' + currentYear + '.</td></tr>';
   document.getElementById("despesas-count").textContent = state.expenses.length + (state.expenses.length === 1 ? " conta" : " contas");
@@ -846,20 +995,77 @@ document.getElementById("expenses-body").addEventListener("keydown", function(ev
 });
 
 document.getElementById("expenses-body").addEventListener("click", function(ev){
-  var btn = ev.target.closest("[data-remove-expense]");
-  if(!btn) return;
-  var id = btn.getAttribute("data-remove-expense");
-  var removed = state.expenses.find(function(e){ return e.id === id; });
-  var removedIndex = state.expenses.indexOf(removed);
-  state.expenses = state.expenses.filter(function(e){ return e.id !== id; });
-  render();
-  deleteExpense(id).then(function(ok){
-    if(!ok && removed){
-      state.expenses.splice(removedIndex, 0, removed); // devolve a linha — não foi excluída de verdade
+  var colorPill = ev.target.closest("[data-color-edit]");
+  if(colorPill){
+    var pickerId = colorPill.getAttribute("data-color-edit");
+    draftColors[pickerId] = colorPill.getAttribute("data-color");
+    selectColorPill(colorPill.closest(".color-picker"), draftColors[pickerId]);
+    return;
+  }
+
+  var openBtn = ev.target.closest("[data-open-edit]");
+  if(openBtn){
+    editingExpenseId = openBtn.getAttribute("data-open-edit");
+    draftColors = {};
+    render();
+    return;
+  }
+
+  var cancelBtn = ev.target.closest("[data-cancel-expense]");
+  if(cancelBtn){
+    editingExpenseId = null;
+    render();
+    return;
+  }
+
+  var saveBtn = ev.target.closest("[data-save-expense]");
+  if(saveBtn){
+    var saveId = saveBtn.getAttribute("data-save-expense");
+    var exp = state.expenses.find(function(e){ return e.id === saveId; });
+    if(!exp) return;
+    var descInput = document.querySelector('[data-edit-desc="' + saveId + '"]');
+    var catInput = document.querySelector('[data-edit-cat="' + saveId + '"]');
+    var newDesc = descInput ? descInput.value.trim() : exp.description;
+    var newCat = catInput ? catInput.value.trim() : exp.category;
+    if(!newDesc || !newCat){ showError("Descrição e categoria não podem ficar em branco."); return; }
+    var newColor = Object.prototype.hasOwnProperty.call(draftColors, saveId) ? draftColors[saveId] : (exp.category_color || null);
+    var patch = { description: newDesc, category: newCat, category_color: newColor };
+    saveBtn.disabled = true;
+    updateExpense(saveId, patch).then(function(ok){
+      saveBtn.disabled = false;
+      if(!ok){ showError('Não foi possível salvar as alterações de "' + newDesc + '". Veja o console (F12) para detalhes.'); return; }
+      Object.assign(exp, patch);
+      editingExpenseId = null;
+      delete draftColors[saveId];
       render();
-      showError('Não foi possível excluir "' + removed.description + '". Veja o console (F12) para detalhes.');
-    }
-  });
+    });
+    return;
+  }
+
+  var delBtn = ev.target.closest("[data-remove-expense]");
+  if(delBtn){
+    var id = delBtn.getAttribute("data-remove-expense");
+    var removed = state.expenses.find(function(e){ return e.id === id; });
+    var removedIndex = state.expenses.indexOf(removed);
+    state.expenses = state.expenses.filter(function(e){ return e.id !== id; });
+    render();
+    deleteExpense(id).then(function(ok){
+      if(!ok && removed){
+        state.expenses.splice(removedIndex, 0, removed); // devolve a linha — não foi excluída de verdade
+        render();
+        showError('Não foi possível excluir "' + removed.description + '". Veja o console (F12) para detalhes.');
+      }
+    });
+  }
+});
+
+document.getElementById("expenses-body").addEventListener("dblclick", function(ev){
+  if(ev.target.closest("input, button, .color-picker")) return;
+  var row = ev.target.closest("[data-expense-row]");
+  if(!row) return;
+  editingExpenseId = row.getAttribute("data-expense-row");
+  draftColors = {};
+  render();
 });
 
 // ---- eventos: alunos ----
@@ -980,14 +1186,45 @@ formStudent.addEventListener("submit", function(ev){
 
 var toggleExpense = document.getElementById("toggle-expense");
 var formExpense = document.getElementById("form-expense");
+var eColorPicker = document.getElementById("e-color-picker");
+var eInstallmentWrap = document.getElementById("e-installment-wrap");
+var eInstallmentCountField = document.getElementById("e-installment-count-field");
+
+eColorPicker.innerHTML = colorPillsHtml("color-form", "new", newExpenseColor);
+eColorPicker.addEventListener("click", function(ev){
+  var btn = ev.target.closest("[data-color-form]");
+  if(!btn) return;
+  newExpenseColor = btn.getAttribute("data-color");
+  selectColorPill(eColorPicker, newExpenseColor);
+});
+
+document.getElementById("e-cat").addEventListener("input", function(ev){
+  var isCard = isCreditCardCategory(ev.target.value);
+  eInstallmentWrap.hidden = !isCard;
+  if(!isCard){
+    document.getElementById("e-installment").checked = false;
+    eInstallmentCountField.hidden = true;
+  }
+});
+document.getElementById("e-installment").addEventListener("change", function(ev){
+  eInstallmentCountField.hidden = !ev.target.checked;
+});
+
+function resetExpenseForm(){
+  formExpense.reset();
+  formExpense.classList.remove("open");
+  newExpenseColor = null;
+  selectColorPill(eColorPicker, null);
+  eInstallmentWrap.hidden = true;
+  eInstallmentCountField.hidden = true;
+}
+
 toggleExpense.addEventListener("click", function(){
   formExpense.classList.toggle("open");
   if(formExpense.classList.contains("open")) document.getElementById("e-desc").focus();
 });
-document.getElementById("cancel-expense").addEventListener("click", function(){
-  formExpense.classList.remove("open");
-  formExpense.reset();
-});
+document.getElementById("cancel-expense").addEventListener("click", resetExpenseForm);
+
 formExpense.addEventListener("submit", function(ev){
   ev.preventDefault();
   var desc = document.getElementById("e-desc").value.trim();
@@ -995,22 +1232,50 @@ formExpense.addEventListener("submit", function(ev){
   var dueTyped = document.getElementById("e-due").value.trim();
   var valor = parseFloat(document.getElementById("e-valor").value);
   var isFixed = document.getElementById("e-fixed").checked;
+  var isInstallment = !eInstallmentWrap.hidden && document.getElementById("e-installment").checked;
+  var installmentCount = parseInt(document.getElementById("e-installment-count").value, 10);
   var due = dueTyped ? parseDayFromInput(dueTyped, currentMonth, currentYear) : null; // dia digitado + mês/ano ativo do painel
   if(!desc || !cat || !due || isNaN(valor)) return;
+  if(isInstallment && (isNaN(installmentCount) || installmentCount < 2)){
+    showError("Informe o número de parcelas (mínimo 2).");
+    return;
+  }
 
   // Espera a confirmação do Supabase antes de mostrar a despesa na tela —
   // nada de id temporário: a linha só entra no estado com o id real do banco.
   var submitBtn = formExpense.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
-  insertExpense({ description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear, userId: currentUserId, isFixed: isFixed }).then(function(row){
+
+  if(isInstallment){
+    var dayNum = extractDayNumber(dueTyped);
+    insertInstallments({
+      description: desc, category: cat, categoryColor: newExpenseColor, amount: valor, dueDay: dayNum,
+      month: currentMonth, year: currentYear, installments: installmentCount, userId: currentUserId,
+    }).then(function(rows){
+      submitBtn.disabled = false;
+      if(!rows){
+        showError('Não foi possível salvar as parcelas de "' + desc + '". Veja o console (F12) para detalhes.');
+        return;
+      }
+      var thisMonthRows = rows.filter(function(r){ return r.month === currentMonth && r.year === currentYear; });
+      state.expenses = state.expenses.concat(thisMonthRows);
+      resetExpenseForm();
+      render();
+    });
+    return;
+  }
+
+  insertExpense({
+    description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear,
+    userId: currentUserId, isFixed: isFixed, categoryColor: newExpenseColor,
+  }).then(function(row){
     submitBtn.disabled = false;
     if(!row){
       showError('Não foi possível salvar a despesa "' + desc + '". Veja o console (F12) para detalhes.');
       return; // mantém o formulário aberto com os dados preenchidos
     }
     state.expenses.push(row);
-    formExpense.reset();
-    formExpense.classList.remove("open");
+    resetExpenseForm();
     render();
   });
 });
