@@ -7,11 +7,15 @@ create table if not exists public.expenses (
   category    text not null,
   amount      numeric(10,2) not null default 0,
   is_paid     boolean not null default false,
+  is_fixed    boolean not null default false, -- repete automaticamente nos próximos meses
   due_date    date,                   -- vencimento da conta
   month       smallint not null,      -- 1-12
   year        smallint not null,      -- ex.: 2026
   created_at  timestamptz not null default now()
 );
+
+-- MIGRAÇÃO (rodada 5) — despesas fixas dinâmicas (sem lista fixa no código)
+alter table public.expenses add column if not exists is_fixed boolean not null default false;
 
 -- Alunos são um cadastro global: não pertencem a um mês, por isso não somem
 -- ao navegar. O status de pagamento de cada mês vive em student_payments.

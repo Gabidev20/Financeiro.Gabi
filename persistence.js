@@ -42,16 +42,20 @@ function logSupabaseError(op, payload, error) {
 
 // ---- alunos (cadastro global) ----
 
-async function fetchActiveStudents() {
+// Alunos ativos da conta logada. O RLS já isola por dono sozinho, mas
+// filtramos por user_id aqui também, explicitamente — nunca dependemos só
+// da política do banco para não misturar dados entre contas.
+async function fetchActiveStudents(userId) {
   if (!isSupabaseEnabled) {
     return (readLocal().students || []).filter((s) => s.active !== false);
   }
   try {
-    const { data, error } = await supabase.from("students").select("*").eq("active", true).order("created_at");
-    if (error) { logSupabaseError("fetchActiveStudents", null, error); return []; }
+    const { data, error } = await supabase
+      .from("students").select("*").eq("active", true).eq("user_id", userId).order("created_at");
+    if (error) { logSupabaseError("fetchActiveStudents", { userId }, error); return []; }
     return data || [];
   } catch (err) {
-    logSupabaseError("fetchActiveStudents", null, err);
+    logSupabaseError("fetchActiveStudents", { userId }, err);
     return [];
   }
 }
@@ -98,16 +102,17 @@ export async function removeStudent(id) {
 
 // ---- pagamento dos alunos, por mês/ano ----
 
-async function fetchPayments(month, year) {
+async function fetchPayments(month, year, userId) {
   if (!isSupabaseEnabled) {
     return (readLocal().payments || []).filter((p) => p.month === month && p.year === year);
   }
   try {
-    const { data, error } = await supabase.from("student_payments").select("*").eq("month", month).eq("year", year);
-    if (error) { logSupabaseError("fetchPayments", { month, year }, error); return []; }
+    const { data, error } = await supabase
+      .from("student_payments").select("*").eq("month", month).eq("year", year).eq("user_id", userId);
+    if (error) { logSupabaseError("fetchPayments", { month, year, userId }, error); return []; }
     return data || [];
   } catch (err) {
-    logSupabaseError("fetchPayments", { month, year }, err);
+    logSupabaseError("fetchPayments", { month, year, userId }, err);
     return [];
   }
 }
@@ -136,22 +141,9 @@ export async function setStudentPayment(studentId, month, year, isPaid, paymentD
   }
 }
 
-// ---- despesas (por mês/ano, com auto-população do modelo base) ----
+// ---- despesas (por mês/ano, com clonagem dinâmica das despesas fixas) ----
 
-// Modelo base do mês: entra sozinho em todo mês novo (sem nenhuma despesa
-// ainda), com "Pago" zerado. As fixas já vêm com o valor de sempre; as
-// variáveis entram com R$ 0,00, prontas para editar o valor daquele mês.
-const BASE_EXPENSES = [
-  { description: "Das - empresa",    category: "Empresa",     amount: 87.05 },
-  { description: "Crédito",          category: "Celular",     amount: 30.00 },
-  { description: "Lavagem de roupa", category: "Serviços",    amount: 80.00 },
-  { description: "Tv - parcela",     category: "Assinaturas", amount: 60.00 },
-  { description: "Cartão de crédito", category: "Cartão",  amount: 0 },
-  { description: "Aluguel das casas", category: "Moradia", amount: 0 },
-  { description: "Gastos extras",     category: "Extras",  amount: 0 },
-];
-
-async function fetchExpenses(month, year) {
+async function fetchExpenses(month, year, userId) {
   if (!isSupabaseEnabled) {
     return (readLocal().expenses || []).filter((e) => e.month === month && e.year === year);
   }
@@ -161,11 +153,12 @@ async function fetchExpenses(month, year) {
       .select("*")
       .eq("month", month)
       .eq("year", year)
+      .eq("user_id", userId)
       .order("created_at", { ascending: true });
-    if (error) { logSupabaseError("fetchExpenses", { month, year }, error); return []; }
+    if (error) { logSupabaseError("fetchExpenses", { month, year, userId }, error); return []; }
     return data || [];
   } catch (err) {
-    logSupabaseError("fetchExpenses", { month, year }, err);
+    logSupabaseError("fetchExpenses", { month, year, userId }, err);
     return [];
   }
 }
@@ -202,8 +195,10 @@ export async function togglePaid(id, isPaid) {
 // Insere uma despesa nova. Devolve a linha salva (com o id real do Supabase)
 // ou null se a gravação falhar — a UI deve tratar null como erro visível,
 // nunca manter a linha só no estado local. userId é o id da sessão ativa.
-export async function insertExpense({ description, category, amount, dueDate, month, year, userId }) {
-  const payload = { description, category, amount, due_date: dueDate || null, is_paid: false, month, year, user_id: userId };
+// isFixed marca a despesa para ser clonada automaticamente todo mês (ver
+// cloneFixedExpensesIfEmpty) — despesas não fixas pertencem só a este mês.
+export async function insertExpense({ description, category, amount, dueDate, month, year, userId, isFixed }) {
+  const payload = { description, category, amount, due_date: dueDate || null, is_paid: false, is_fixed: !!isFixed, month, year, user_id: userId };
   if (!isSupabaseEnabled) {
     const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
@@ -238,16 +233,63 @@ export async function deleteExpense(id) {
   }
 }
 
-// Se o mês/ano informado ainda não tiver nenhuma despesa, insere o modelo
-// base completo (BASE_EXPENSES) em UM insert em lote e devolve as linhas já
-// com o id real gerado pelo Supabase. Se a inserção falhar, loga o erro em
-// detalhe e devolve [] (a tela mostra "nenhuma despesa" em vez de fantasmas).
-// userId é o id da sessão ativa, obrigatório no insert para passar no RLS.
-async function seedBaseExpensesIfEmpty(month, year, userId) {
-  const current = await fetchExpenses(month, year);
+// Busca as despesas marcadas como fixas (is_fixed = true) que o usuário já
+// cadastrou em qualquer mês anterior ao (month, year) informado. Não existe
+// lista fixa nenhuma no código — tudo vem do que o próprio usuário marcou.
+async function fetchFixedExpenseTemplates(month, year, userId) {
+  if (!isSupabaseEnabled) {
+    return (readLocal().expenses || []).filter((e) =>
+      e.is_fixed && (e.year < year || (e.year === year && e.month < month))
+    );
+  }
+  try {
+    const { data, error } = await supabase
+      .from("expenses")
+      .select("*")
+      .eq("is_fixed", true)
+      .eq("user_id", userId);
+    if (error) { logSupabaseError("fetchFixedExpenseTemplates", { month, year, userId }, error); return []; }
+    return (data || []).filter((e) => e.year < year || (e.year === year && e.month < month));
+  } catch (err) {
+    logSupabaseError("fetchFixedExpenseTemplates", { month, year, userId }, err);
+    return [];
+  }
+}
+
+// Se a mesma despesa fixa (mesma descrição) existir em vários meses antigos
+// (porque já foi clonada antes), fica só com a ocorrência mais recente — não
+// insere uma cópia por mês de histórico, só a "versão atual" de cada uma.
+function latestPerDescription(rows) {
+  const byDescription = {};
+  rows.forEach((r) => {
+    const rank = r.year * 12 + r.month;
+    const existing = byDescription[r.description];
+    if (!existing || rank > existing._rank) byDescription[r.description] = { ...r, _rank: rank };
+  });
+  return Object.values(byDescription);
+}
+
+// Se o mês/ano informado ainda não tiver nenhuma despesa, clona as fixas mais
+// recentes do usuário (com "Pago" zerado) para este mês. Sem nenhuma despesa
+// fixa cadastrada, o mês simplesmente fica vazio — não existe modelo padrão
+// fixo no código. userId é obrigatório: sem ele o insert é barrado pelo RLS.
+async function cloneFixedExpensesIfEmpty(month, year, userId) {
+  const current = await fetchExpenses(month, year, userId);
   if (current.length) return current;
 
-  const toInsert = BASE_EXPENSES.map((e) => ({ ...e, due_date: null, is_paid: false, month, year, user_id: userId }));
+  const templates = latestPerDescription(await fetchFixedExpenseTemplates(month, year, userId));
+  if (!templates.length) return current;
+
+  const toInsert = templates.map((e) => ({
+    description: e.description,
+    category: e.category,
+    amount: e.amount,
+    is_fixed: true,
+    is_paid: false,
+    due_date: null,
+    month, year,
+    user_id: userId,
+  }));
 
   if (!isSupabaseEnabled) {
     const rows = toInsert.map((e) => ({ id: crypto.randomUUID(), ...e }));
@@ -259,10 +301,10 @@ async function seedBaseExpensesIfEmpty(month, year, userId) {
 
   try {
     const { data, error } = await supabase.from("expenses").insert(toInsert).select();
-    if (error) { logSupabaseError("seedBaseExpensesIfEmpty", { month, year, toInsert }, error); return []; }
+    if (error) { logSupabaseError("cloneFixedExpensesIfEmpty", { month, year, toInsert }, error); return []; }
     return data || [];
   } catch (err) {
-    logSupabaseError("seedBaseExpensesIfEmpty", { month, year, toInsert }, err);
+    logSupabaseError("cloneFixedExpensesIfEmpty", { month, year, toInsert }, err);
     return [];
   }
 }
@@ -270,13 +312,18 @@ async function seedBaseExpensesIfEmpty(month, year, userId) {
 // ---- carregamento do mês ativo ----
 
 // Chamada ao trocar de mês, ao carregar a página, e a cada evento realtime:
-// - os alunos ativos são sempre os mesmos, em qualquer mês (cadastro global);
-//   a leitura já vem filtrada por dono pelo RLS — não precisa passar userId aqui;
-// - o status de pagamento de cada aluno vem de student_payments, filtrado por month/year;
-// - despesas: se o mês estiver vazio, o modelo base completo é inserido em lote
-//   (por isso o insert PRECISA de userId) e a lista devolvida já vem com os ids reais.
+// - os alunos ativos são sempre os mesmos, em qualquer mês (cadastro global
+//   da conta), filtrados explicitamente por user_id;
+// - o status de pagamento de cada aluno vem de student_payments, filtrado por
+//   month/year e user_id;
+// - despesas: se o mês estiver vazio, as fixas mais recentes do usuário são
+//   clonadas para cá; sem nenhuma fixa cadastrada, o mês fica vazio de verdade
+//   (não existe modelo padrão embutido no código).
 export async function loadMonthData(month, year, userId) {
-  const [students, payments] = await Promise.all([fetchActiveStudents(), fetchPayments(month, year)]);
+  const [students, payments] = await Promise.all([
+    fetchActiveStudents(userId),
+    fetchPayments(month, year, userId),
+  ]);
 
   const paymentByStudent = {};
   payments.forEach((p) => { paymentByStudent[p.student_id] = p; });
@@ -286,7 +333,7 @@ export async function loadMonthData(month, year, userId) {
     return { ...s, is_paid: p ? p.is_paid : false, payment_date: p ? p.payment_date : null };
   });
 
-  const expenses = await seedBaseExpensesIfEmpty(month, year, userId);
+  const expenses = await cloneFixedExpensesIfEmpty(month, year, userId);
 
   return { students: studentsWithStatus, expenses };
 }

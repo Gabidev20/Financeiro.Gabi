@@ -190,6 +190,15 @@
     display:inline-block; font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px;
     background:var(--surface-alt); color:var(--text-muted); white-space:nowrap;
   }
+  .fixed-badge{
+    display:inline-block; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em;
+    padding:2px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent-strong);
+    vertical-align:middle; margin-left:6px;
+  }
+  .checkbox-field{
+    display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text); cursor:pointer;
+  }
+  .checkbox-field input{ width:16px; height:16px; accent-color:var(--accent); cursor:pointer; }
   .row-del{
     border:none; background:none; color:var(--text-muted); cursor:pointer; padding:4px; border-radius:6px;
     line-height:0;
@@ -506,6 +515,7 @@
             <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="text" inputmode="numeric" maxlength="5" placeholder="DD/MM" required></div>
             <div class="field"><label for="e-valor">Valor (R$)</label><input id="e-valor" type="number" step="0.01" min="0" required placeholder="60"></div>
           </div>
+          <label class="checkbox-field"><input type="checkbox" id="e-fixed"> Despesa fixa — repetir todos os meses</label>
           <div class="actions">
             <button type="button" class="btn btn-ghost" id="cancel-expense">Cancelar</button>
             <button type="submit" class="btn btn-primary">Adicionar despesa</button>
@@ -600,7 +610,7 @@ function render(){
   eBody.innerHTML = state.expenses.length ? state.expenses.map(function(e){
     var status = dueStatus(e);
     return '<tr class="' + (e.is_paid ? "paid" : "") + '">' +
-      '<td class="desc">' + escapeHtml(e.description) + '</td>' +
+      '<td class="desc">' + escapeHtml(e.description) + (e.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '') + '</td>' +
       '<td><span class="cat-chip">' + escapeHtml(e.category) + '</span></td>' +
       '<td><input type="text" inputmode="numeric" maxlength="5" class="due-input' + (status ? " " + status : "") + '" data-edit-due="' + e.id + '" value="' + (e.due_date ? formatShortDate(e.due_date) : "") + '" placeholder="DD/MM" aria-label="Vencimento de ' + escapeHtml(e.description) + '"></td>' +
       '<td class="num"><span class="value-edit"><span>R$</span><input type="number" step="0.01" min="0" class="value-input" data-edit-expense="' + e.id + '" value="' + Number(e.amount).toFixed(2) + '" aria-label="Valor de ' + escapeHtml(e.description) + '"></span></td>' +
@@ -878,6 +888,7 @@ formExpense.addEventListener("submit", function(ev){
   var cat = document.getElementById("e-cat").value.trim();
   var dueTyped = document.getElementById("e-due").value.trim();
   var valor = parseFloat(document.getElementById("e-valor").value);
+  var isFixed = document.getElementById("e-fixed").checked;
   var due = dueTyped ? parseDayFromInput(dueTyped, currentMonth, currentYear) : null; // dia digitado + mês/ano ativo do painel
   if(!desc || !cat || !due || isNaN(valor)) return;
 
@@ -885,7 +896,7 @@ formExpense.addEventListener("submit", function(ev){
   // nada de id temporário: a linha só entra no estado com o id real do banco.
   var submitBtn = formExpense.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
-  insertExpense({ description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear, userId: currentUserId }).then(function(row){
+  insertExpense({ description: desc, category: cat, amount: valor, dueDate: due, month: currentMonth, year: currentYear, userId: currentUserId, isFixed: isFixed }).then(function(row){
     submitBtn.disabled = false;
     if(!row){
       showError('Não foi possível salvar a despesa "' + desc + '". Veja o console (F12) para detalhes.');
