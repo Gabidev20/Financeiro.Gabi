@@ -126,3 +126,41 @@ values (
   'Aluno'
 )
 on conflict (user_id) do nothing;
+
+-- MIGRAÇÃO (rodada 8) — receitas (students) voltam a ser por mês/ano, igual
+-- expenses: fixas (is_fixed=true) clonam pro próximo mês vazio, pontuais
+-- existem só onde nasceram. student_payments deixa de existir — is_paid e
+-- payment_date voltam pra própria linha do aluno.
+
+alter table public.students add column if not exists is_fixed    boolean not null default true;
+alter table public.students add column if not exists is_paid     boolean not null default false;
+alter table public.students add column if not exists payment_date date;
+alter table public.students add column if not exists month       smallint;
+alter table public.students add column if not exists year        smallint;
+
+-- Traz o status de pagamento de student_payments pra própria linha do aluno.
+-- Se o mesmo aluno tiver pagamento registrado em mais de um mês (só possível
+-- se vocês já tinham navegado por vários meses antes desta versão), fica só
+-- com o mês mais recente — o histórico antigo em outros meses não é
+-- reconstruído como linhas separadas.
+update public.students s
+set is_paid = latest.is_paid,
+    payment_date = latest.payment_date,
+    month = latest.month,
+    year = latest.year
+from (
+  select distinct on (student_id) student_id, month, year, is_paid, payment_date
+  from public.student_payments
+  order by student_id, year desc, month desc
+) latest
+where latest.student_id = s.id;
+
+-- Alunos sem nenhum pagamento registrado ainda (cadastrados nesta sessão,
+-- por exemplo) caem no mês ativo atual — ajuste os números se for outro mês:
+update public.students set month = 9, year = 2026 where month is null;
+
+alter table public.students alter column month set not null;
+alter table public.students alter column year set not null;
+alter table public.students drop column if exists active;
+
+drop table if exists public.student_payments;

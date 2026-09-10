@@ -11,8 +11,8 @@
 //
 // Modelo:
 // - user_settings: 1 linha por usuário — nome do workspace e rótulos da tela.
-// - students: cadastro global de alunos — não muda de mês.
-// - student_payments: status de pagamento por aluno/mês/ano (1 linha por combinação).
+// - students (receitas): por mês/ano, igual expenses — as marcadas is_fixed
+//   são clonadas pro próximo mês vazio; as pontuais existem só onde nasceram.
 // - expenses: despesas por mês/ano — despesas fixas são clonadas do histórico
 //   do próprio usuário na primeira visita a um mês vazio.
 
@@ -21,24 +21,26 @@ import { supabase, isSupabaseEnabled } from "./supabaseClient.js";
 const LOCAL_KEY = "painel-gabi-v1";
 
 function readLocal() {
-  try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || { expenses: [], students: [], payments: [] }; }
-  catch (e) { return { expenses: [], students: [], payments: [] }; }
+  try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || { expenses: [], students: [] }; }
+  catch (e) { return { expenses: [], students: [] }; }
 }
 function writeLocal(state) {
   try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); } catch (e) {}
 }
-function upsertLocalPayment(state, studentId, month, year, patch) {
-  state.payments = state.payments || [];
-  let p = state.payments.find((p) => p.student_id === studentId && p.month === month && p.year === year);
-  if (!p) {
-    p = { student_id: studentId, month, year, is_paid: false, payment_date: null };
-    state.payments.push(p);
-  }
-  Object.assign(p, patch);
-  return p;
-}
 function logSupabaseError(op, payload, error) {
   console.error("[persistence] " + op + " falhou — confira RLS/schema no Supabase", { payload, error });
+}
+// Entre várias ocorrências históricas da mesma fixa (mesmo nome/descrição),
+// fica só com a mais recente — não insere uma cópia por mês de histórico.
+function latestByKey(rows, keyOf) {
+  const byKey = {};
+  rows.forEach((r) => {
+    const key = keyOf(r);
+    const rank = r.year * 12 + r.month;
+    const existing = byKey[key];
+    if (!existing || rank > existing._rank) byKey[key] = { ...r, _rank: rank };
+  });
+  return Object.values(byKey);
 }
 
 // ---- configurações do workspace (por usuário) ----
@@ -120,31 +122,32 @@ export async function updateSettings(userId, patch) {
   }
 }
 
-// ---- alunos (cadastro global) ----
+// ---- alunos / receitas (por mês/ano, com clonagem dinâmica das fixas) ----
 
-// Alunos ativos da conta logada. O RLS já isola por dono sozinho, mas
-// filtramos por user_id aqui também, explicitamente — nunca dependemos só
-// da política do banco para não misturar dados entre contas.
-async function fetchActiveStudents(userId) {
+async function fetchStudents(month, year, userId) {
   if (!isSupabaseEnabled) {
-    return (readLocal().students || []).filter((s) => s.active !== false);
+    return (readLocal().students || []).filter((s) => s.month === month && s.year === year);
   }
   try {
     const { data, error } = await supabase
-      .from("students").select("*").eq("active", true).eq("user_id", userId).order("created_at");
-    if (error) { logSupabaseError("fetchActiveStudents", { userId }, error); return []; }
+      .from("students").select("*").eq("month", month).eq("year", year).eq("user_id", userId).order("created_at");
+    if (error) { logSupabaseError("fetchStudents", { month, year, userId }, error); return []; }
     return data || [];
   } catch (err) {
-    logSupabaseError("fetchActiveStudents", { userId }, err);
+    logSupabaseError("fetchStudents", { month, year, userId }, err);
     return [];
   }
 }
 
-// Insere um novo aluno no cadastro global. Devolve a linha salva (com o id
+// Insere um novo aluno/receita neste mês/ano. Devolve a linha salva (com o id
 // real do Supabase) ou null se a gravação falhar. userId é o id da sessão
-// ativa (session.user.id) — obrigatório para passar no RLS "own rows".
-export async function insertStudent({ studentName, guardianName, monthlyFee, userId }) {
-  const payload = { student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee, active: true, user_id: userId };
+// ativa. isFixed marca a receita para ser clonada automaticamente todo mês
+// (ver cloneFixedStudentsIfEmpty) — não fixas pertencem só a este mês.
+export async function insertStudent({ studentName, guardianName, monthlyFee, month, year, userId, isFixed }) {
+  const payload = {
+    student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee,
+    is_fixed: !!isFixed, is_paid: false, payment_date: null, month, year, user_id: userId,
+  };
   if (!isSupabaseEnabled) {
     const row = { id: crypto.randomUUID(), ...payload };
     const state = readLocal();
@@ -162,7 +165,9 @@ export async function insertStudent({ studentName, guardianName, monthlyFee, use
   }
 }
 
-// "Remove" um aluno via soft-delete (active = false) — some de todos os meses.
+// Remove um aluno/receita (botão de excluir na linha) — some só deste mês.
+// Uma fixa removida aqui não impede meses futuros de clonarem a ocorrência
+// anterior mais recente que ainda existir.
 export async function removeStudent(id) {
   if (!isSupabaseEnabled) {
     const state = readLocal();
@@ -171,7 +176,7 @@ export async function removeStudent(id) {
     return true;
   }
   try {
-    const { error } = await supabase.from("students").update({ active: false }).eq("id", id);
+    const { error } = await supabase.from("students").delete().eq("id", id);
     if (error) { logSupabaseError("removeStudent", { id }, error); return false; }
     return true;
   } catch (err) {
@@ -180,44 +185,93 @@ export async function removeStudent(id) {
   }
 }
 
-// ---- pagamento dos alunos, por mês/ano ----
-
-async function fetchPayments(month, year, userId) {
-  if (!isSupabaseEnabled) {
-    return (readLocal().payments || []).filter((p) => p.month === month && p.year === year);
-  }
-  try {
-    const { data, error } = await supabase
-      .from("student_payments").select("*").eq("month", month).eq("year", year).eq("user_id", userId);
-    if (error) { logSupabaseError("fetchPayments", { month, year, userId }, error); return []; }
-    return data || [];
-  } catch (err) {
-    logSupabaseError("fetchPayments", { month, year, userId }, err);
-    return [];
-  }
-}
-
-// Define o status de pagamento de um aluno neste mês/ano (checkbox "Pago" ou
-// edição direta da data). Devolve true se o Supabase confirmou a gravação.
-// userId é o id da sessão ativa — necessário no upsert para passar no RLS.
-export async function setStudentPayment(studentId, month, year, isPaid, paymentDate, userId) {
-  const finalDate = isPaid ? (paymentDate || new Date().toISOString().slice(0, 10)) : null;
-  const payload = { student_id: studentId, month, year, is_paid: isPaid, payment_date: finalDate, user_id: userId };
+// Atualiza campos de um aluno/receita pelo id real do Supabase (nunca por
+// índice de array). Devolve true só se o Supabase confirmou ter alterado a
+// linha — zero linhas afetadas sem erro geralmente é RLS bloqueando ou id errado.
+export async function updateStudent(id, patch) {
   if (!isSupabaseEnabled) {
     const state = readLocal();
-    upsertLocalPayment(state, studentId, month, year, { is_paid: isPaid, payment_date: finalDate });
+    const s = state.students.find((s) => s.id === id);
+    if (s) Object.assign(s, patch);
     writeLocal(state);
     return true;
   }
   try {
-    const { error } = await supabase
-      .from("student_payments")
-      .upsert(payload, { onConflict: "student_id,month,year" });
-    if (error) { logSupabaseError("setStudentPayment", payload, error); return false; }
+    const { data, error } = await supabase.from("students").update(patch).eq("id", id).select();
+    if (error) { logSupabaseError("updateStudent", { id, patch }, error); return false; }
+    if (!data || !data.length) {
+      console.warn("[persistence] updateStudent não alterou nenhuma linha (id inexistente ou bloqueado por RLS)", { id, patch });
+      return false;
+    }
     return true;
   } catch (err) {
-    logSupabaseError("setStudentPayment", payload, err);
+    logSupabaseError("updateStudent", { id, patch }, err);
     return false;
+  }
+}
+
+// Marca/desmarca o pagamento de um aluno/receita, registrando a data do clique.
+export async function toggleStudentPaid(id, isPaid, paymentDate) {
+  return updateStudent(id, {
+    is_paid: isPaid,
+    payment_date: isPaid ? (paymentDate || new Date().toISOString().slice(0, 10)) : null,
+  });
+}
+
+// Busca os alunos/receitas marcados como fixos que o usuário já cadastrou em
+// qualquer mês anterior ao (month, year) informado.
+async function fetchFixedStudentTemplates(month, year, userId) {
+  if (!isSupabaseEnabled) {
+    return (readLocal().students || []).filter((s) =>
+      s.is_fixed && (s.year < year || (s.year === year && s.month < month))
+    );
+  }
+  try {
+    const { data, error } = await supabase.from("students").select("*").eq("is_fixed", true).eq("user_id", userId);
+    if (error) { logSupabaseError("fetchFixedStudentTemplates", { month, year, userId }, error); return []; }
+    return (data || []).filter((s) => s.year < year || (s.year === year && s.month < month));
+  } catch (err) {
+    logSupabaseError("fetchFixedStudentTemplates", { month, year, userId }, err);
+    return [];
+  }
+}
+
+// Se o mês/ano informado ainda não tiver nenhum aluno/receita, clona as fixas
+// mais recentes do usuário (com "Pago" zerado) para este mês. Sem nenhuma
+// fixa cadastrada, o mês fica vazio de verdade.
+async function cloneFixedStudentsIfEmpty(month, year, userId) {
+  const current = await fetchStudents(month, year, userId);
+  if (current.length) return current;
+
+  const templates = latestByKey(await fetchFixedStudentTemplates(month, year, userId), (s) => s.student_name);
+  if (!templates.length) return current;
+
+  const toInsert = templates.map((s) => ({
+    student_name: s.student_name,
+    guardian_name: s.guardian_name,
+    monthly_fee: s.monthly_fee,
+    is_fixed: true,
+    is_paid: false,
+    payment_date: null,
+    month, year,
+    user_id: userId,
+  }));
+
+  if (!isSupabaseEnabled) {
+    const rows = toInsert.map((s) => ({ id: crypto.randomUUID(), ...s }));
+    const state = readLocal();
+    state.students = (state.students || []).concat(rows);
+    writeLocal(state);
+    return rows;
+  }
+
+  try {
+    const { data, error } = await supabase.from("students").insert(toInsert).select();
+    if (error) { logSupabaseError("cloneFixedStudentsIfEmpty", { month, year, toInsert }, error); return []; }
+    return data || [];
+  } catch (err) {
+    logSupabaseError("cloneFixedStudentsIfEmpty", { month, year, toInsert }, err);
+    return [];
   }
 }
 
@@ -336,19 +390,6 @@ async function fetchFixedExpenseTemplates(month, year, userId) {
   }
 }
 
-// Se a mesma despesa fixa (mesma descrição) existir em vários meses antigos
-// (porque já foi clonada antes), fica só com a ocorrência mais recente — não
-// insere uma cópia por mês de histórico, só a "versão atual" de cada uma.
-function latestPerDescription(rows) {
-  const byDescription = {};
-  rows.forEach((r) => {
-    const rank = r.year * 12 + r.month;
-    const existing = byDescription[r.description];
-    if (!existing || rank > existing._rank) byDescription[r.description] = { ...r, _rank: rank };
-  });
-  return Object.values(byDescription);
-}
-
 // Se o mês/ano informado ainda não tiver nenhuma despesa, clona as fixas mais
 // recentes do usuário (com "Pago" zerado) para este mês. Sem nenhuma despesa
 // fixa cadastrada, o mês simplesmente fica vazio — não existe modelo padrão
@@ -357,7 +398,7 @@ async function cloneFixedExpensesIfEmpty(month, year, userId) {
   const current = await fetchExpenses(month, year, userId);
   if (current.length) return current;
 
-  const templates = latestPerDescription(await fetchFixedExpenseTemplates(month, year, userId));
+  const templates = latestByKey(await fetchFixedExpenseTemplates(month, year, userId), (e) => e.description);
   if (!templates.length) return current;
 
   const toInsert = templates.map((e) => ({
@@ -392,30 +433,15 @@ async function cloneFixedExpensesIfEmpty(month, year, userId) {
 // ---- carregamento do mês ativo ----
 
 // Chamada ao trocar de mês, ao carregar a página, e a cada evento realtime:
-// - os alunos ativos são sempre os mesmos, em qualquer mês (cadastro global
-//   da conta), filtrados explicitamente por user_id;
-// - o status de pagamento de cada aluno vem de student_payments, filtrado por
-//   month/year e user_id;
-// - despesas: se o mês estiver vazio, as fixas mais recentes do usuário são
-//   clonadas para cá; sem nenhuma fixa cadastrada, o mês fica vazio de verdade
-//   (não existe modelo padrão embutido no código).
+// alunos/receitas e despesas seguem a mesma regra — se o mês estiver vazio,
+// as fixas mais recentes do usuário são clonadas pra cá (com "Pago" zerado);
+// sem nenhuma fixa cadastrada, o mês fica vazio de verdade.
 export async function loadMonthData(month, year, userId) {
-  const [students, payments] = await Promise.all([
-    fetchActiveStudents(userId),
-    fetchPayments(month, year, userId),
+  const [students, expenses] = await Promise.all([
+    cloneFixedStudentsIfEmpty(month, year, userId),
+    cloneFixedExpensesIfEmpty(month, year, userId),
   ]);
-
-  const paymentByStudent = {};
-  payments.forEach((p) => { paymentByStudent[p.student_id] = p; });
-
-  const studentsWithStatus = students.map((s) => {
-    const p = paymentByStudent[s.id];
-    return { ...s, is_paid: p ? p.is_paid : false, payment_date: p ? p.payment_date : null };
-  });
-
-  const expenses = await cloneFixedExpensesIfEmpty(month, year, userId);
-
-  return { students: studentsWithStatus, expenses };
+  return { students, expenses };
 }
 
 // ---- tempo real ----
@@ -431,7 +457,6 @@ export function subscribeRealtime(onChange) {
     .channel("painel-gabi-sync")
     .on("postgres_changes", { event: "*", schema: "public", table: "expenses" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "students" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "student_payments" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "user_settings" }, onChange)
     .subscribe((status, err) => {
       if (err) console.error("[persistence] falha ao assinar o realtime", err);

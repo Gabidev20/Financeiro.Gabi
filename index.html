@@ -204,6 +204,7 @@
   th.chk, td.chk{ text-align:center; width:44px; }
   .name-cell strong{ display:block; font-weight:600; }
   .name-cell span{ display:block; font-size:12px; color:var(--text-muted); }
+  .name-cell .fixed-badge{ display:inline-block; font-size:9.5px; color:var(--accent-strong); }
   tr.paid td{ color:var(--text-muted); }
   tr.paid .desc{ text-decoration:line-through; text-decoration-color:var(--border); }
   .cat-chip{
@@ -504,9 +505,10 @@
             <div class="field"><label for="s-resp">Detalhe (opcional)</label><input id="s-resp" placeholder="Ex.: responsável, dia da semana…"></div>
             <div class="field"><label for="s-valor">Mensalidade (R$)</label><input id="s-valor" type="number" step="0.01" min="0" required placeholder="180"></div>
           </div>
+          <label class="checkbox-field"><input type="checkbox" id="s-fixed" checked> Receita fixa — repetir todos os meses</label>
           <div class="actions">
             <button type="button" class="btn btn-ghost" id="cancel-student">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Adicionar aluno</button>
+            <button type="submit" class="btn btn-primary">Adicionar</button>
           </div>
         </form>
       </div>
@@ -566,7 +568,7 @@
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
-  removeStudent, setStudentPayment, loadMonthData, subscribeRealtime,
+  removeStudent, toggleStudentPaid, updateStudent, loadMonthData, subscribeRealtime,
   getOrCreateSettings, updateSettings
 } from "./persistence.js";
 import { getSession, signIn, signUp, signOut, onAuthChange } from "./auth.js";
@@ -695,7 +697,7 @@ function render(){
   var sBody = document.getElementById("students-body");
   sBody.innerHTML = state.students.length ? state.students.map(function(s){
     return '<tr class="' + (s.is_paid ? "paid" : "") + '">' +
-      '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong>' + (s.guardian_name ? '<span>' + escapeHtml(s.guardian_name) + '</span>' : '') + '</td>' +
+      '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong>' + (s.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '') + (s.guardian_name ? '<span>' + escapeHtml(s.guardian_name) + '</span>' : '') + '</td>' +
       '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
       '<td><input type="text" inputmode="numeric" maxlength="5" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
@@ -885,7 +887,7 @@ document.getElementById("students-body").addEventListener("change", function(ev)
       s.is_paid = ev.target.checked;
       s.payment_date = ev.target.checked ? todayIso : null; // sugere hoje; o campo Data pgto permite corrigir o dia
       render();
-      setStudentPayment(toggleId, currentMonth, currentYear, ev.target.checked, undefined, currentUserId).then(function(ok){
+      toggleStudentPaid(toggleId, ev.target.checked).then(function(ok){
         if(!ok){
           s.is_paid = wasPaid; s.payment_date = wasDate; // reverte
           render();
@@ -906,7 +908,7 @@ document.getElementById("students-body").addEventListener("change", function(ev)
       s2.is_paid = false;
       s2.payment_date = null;
       render();
-      setStudentPayment(dateId, currentMonth, currentYear, false, undefined, currentUserId).then(function(ok){
+      updateStudent(dateId, { is_paid: false, payment_date: null }).then(function(ok){
         if(!ok) showError('Não foi possível salvar o pagamento de "' + s2.student_name + '". Veja o console (F12) para detalhes.');
       });
       return;
@@ -916,7 +918,7 @@ document.getElementById("students-body").addEventListener("change", function(ev)
     s2.is_paid = true;
     s2.payment_date = iso;
     render();
-    setStudentPayment(dateId, currentMonth, currentYear, true, iso, currentUserId).then(function(ok){
+    updateStudent(dateId, { is_paid: true, payment_date: iso }).then(function(ok){
       if(!ok) showError('Não foi possível salvar o pagamento de "' + s2.student_name + '". Veja o console (F12) para detalhes.');
     });
   }
@@ -949,19 +951,20 @@ formStudent.addEventListener("submit", function(ev){
   var aluno = document.getElementById("s-aluno").value.trim();
   var resp = document.getElementById("s-resp").value.trim();
   var valor = parseFloat(document.getElementById("s-valor").value);
-  if(!aluno || !resp || isNaN(valor)) return;
+  var isFixed = document.getElementById("s-fixed").checked;
+  if(!aluno || isNaN(valor)) return;
 
   // Espera a confirmação do Supabase antes de mostrar o aluno na tela — nada
   // de id temporário: a linha só entra no estado com o id real do banco.
   var submitBtn = formStudent.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
-  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor, userId: currentUserId }).then(function(row){
+  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor, month: currentMonth, year: currentYear, userId: currentUserId, isFixed: isFixed }).then(function(row){
     submitBtn.disabled = false;
     if(!row){
       showError('Não foi possível salvar o aluno "' + aluno + '". Veja o console (F12) para detalhes.');
       return; // mantém o formulário aberto com os dados preenchidos
     }
-    state.students.push({ id: row.id, student_name: row.student_name, guardian_name: row.guardian_name, monthly_fee: row.monthly_fee, active: row.active, is_paid: false, payment_date: null });
+    state.students.push(row);
     state.receitaManual = null; // recalcula automaticamente
     formStudent.reset();
     formStudent.classList.remove("open");
