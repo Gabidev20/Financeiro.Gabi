@@ -1,5 +1,15 @@
 -- supabase-schema.sql
 -- Rode isto no SQL Editor do Supabase (projeto novo ou existente).
+--
+-- ATENÇÃO — NÃO reexecute o arquivo inteiro numa base que já está em uso:
+-- os blocos de "MIGRAÇÃO (rodada 3)" e "rodada 8" fazem drop/backfill de
+-- colunas e NÃO são seguros para rodar mais de uma vez (a rodada 3, em
+-- especial, lê e depois apaga a coluna "paid" — rodando de novo ela já não
+-- existe mais e a query quebra; se você contornar esse erro, a rodada 8
+-- reconstrói month/year do zero e pode zerar o status de pagamento e a data
+-- dos seus alunos). Se seu banco já está rodando em produção, aplique só o
+-- bloco mais novo que ainda não rodou (ex.: a última "rodada N" no fim do
+-- arquivo) copiando e colando apenas aquele trecho no SQL Editor.
 
 create table if not exists public.expenses (
   id          uuid primary key default gen_random_uuid(),
