@@ -679,6 +679,7 @@
           <button type="button" class="filter-pill active" data-cat-filter="all">Todas</button>
           <button type="button" class="filter-pill" data-cat-filter="cartao">Cartão de crédito</button>
           <button type="button" class="filter-pill" data-cat-filter="pix">Pix</button>
+          <button type="button" class="filter-pill" data-cat-filter="caixinha">Caixinha</button>
           <button type="button" class="filter-pill" data-cat-filter="outras">Outras</button>
         </div>
 
@@ -700,6 +701,7 @@
         <div class="exp-footer category-totals">
           <div class="item"><span class="k">Total cartão</span><span class="v num" id="foot-cartao">R$ 0,00</span></div>
           <div class="item"><span class="k">Total Pix</span><span class="v num" id="foot-pix">R$ 0,00</span></div>
+          <div class="item"><span class="k">Total caixinha</span><span class="v num" id="foot-caixinha">R$ 0,00</span></div>
           <div class="item"><span class="k">Outras categorias</span><span class="v num" id="foot-outras">R$ 0,00</span></div>
         </div>
         <button type="button" class="btn btn-ghost mark-all-btn" id="mark-all-expenses-paid">Marcar todas como pagas</button>
@@ -791,6 +793,7 @@ var currentUserId = null;
 var currentSettings = null;
 var unsubscribeRealtime = null;
 var editingExpenseId = null;
+var editingStudentId = null;
 var draftColors = {}; // cor escolhida na hora, por id de despesa, enquanto a linha está em edição
 var expenseCategoryFilter = "all"; // all | cartao | pix | outras
 
@@ -904,6 +907,23 @@ document.getElementById("pix-key-input").addEventListener("blur", function(ev){
   });
 });
 
+// Soma (ou desfaz) um depósito na reserva quando uma despesa categoria
+// "caixinha" é marcada/desmarcada como paga — a Reserva/Caixinha vira um
+// saldo acumulado em vez de um número só editável manualmente.
+function applyCaixinhaDeposit(delta){
+  var previous = Number(currentSettings.emergency_fund || 0);
+  var next = Math.max(0, previous + delta);
+  currentSettings.emergency_fund = next;
+  var fundInput = document.getElementById("emergency-fund-input");
+  if(document.activeElement !== fundInput) fundInput.value = next.toFixed(2);
+  updateSettings(currentUserId, { emergency_fund: next }).then(function(ok){
+    if(ok){ flashSaved(fundInput); return; }
+    currentSettings.emergency_fund = previous;
+    if(document.activeElement !== fundInput) fundInput.value = previous.toFixed(2);
+    showError("Não foi possível atualizar a reserva. Veja o console (F12) para detalhes.");
+  });
+}
+
 document.getElementById("emergency-fund-input").addEventListener("blur", function(ev){
   var value = parseFloat(ev.target.value);
   if(isNaN(value) || value < 0) value = 0;
@@ -954,6 +974,9 @@ function isCreditCardCategory(category){
 }
 function isPixCategory(category){
   return normalizeCategoryText(category) === "pix";
+}
+function isCaixinhaCategory(category){
+  return normalizeCategoryText(category).indexOf("caixinha") !== -1;
 }
 // Desenha as pílulas de cor. targetAttr vira o nome do data-attribute usado
 // para identificar o alvo do clique (form novo, ou id da despesa em edição).
@@ -1016,10 +1039,11 @@ function expensesSortedByDueDate(){
 function matchesExpenseFilter(e, filter){
   if(filter === "cartao") return isCreditCardCategory(e.category);
   if(filter === "pix") return isPixCategory(e.category);
-  if(filter === "outras") return !isCreditCardCategory(e.category) && !isPixCategory(e.category);
+  if(filter === "caixinha") return isCaixinhaCategory(e.category);
+  if(filter === "outras") return !isCreditCardCategory(e.category) && !isPixCategory(e.category) && !isCaixinhaCategory(e.category);
   return true; // "all"
 }
-var EXPENSE_FILTER_SUFFIX = { all: "", cartao: " (Cartão de crédito)", pix: " (Pix)", outras: " (Outras)" };
+var EXPENSE_FILTER_SUFFIX = { all: "", cartao: " (Cartão de crédito)", pix: " (Pix)", caixinha: " (Caixinha)", outras: " (Outras)" };
 
 function whatsappIcon(){
   return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.44 9.9-9.9 0-2.64-1.03-5.13-2.9-6.99A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.24.68-1.4 1.3-1.93 1.38-.5.08-1.12.11-1.8-.11-.42-.13-.96-.31-1.65-.6-2.9-1.25-4.79-4.16-4.94-4.35-.14-.19-1.18-1.57-1.18-3 0-1.42.75-2.12 1.02-2.41.27-.29.58-.36.78-.36l.55.01c.18.01.42-.07.65.5.24.58.81 2 .88 2.14.07.15.12.32.02.51-.1.19-.15.31-.3.48-.15.17-.31.38-.44.51-.15.15-.3.31-.13.6.17.29.75 1.24 1.62 2.01 1.11.99 2.05 1.3 2.34 1.45.29.15.46.13.63-.08.17-.21.72-.84.91-1.13.19-.29.38-.24.64-.15.26.1 1.65.78 1.93.92.28.14.47.21.54.33.07.12.07.7-.17 1.38Z"/></svg>';
@@ -1042,17 +1066,34 @@ function whatsappLink(phone, message){
 function render(){
   var sBody = document.getElementById("students-body");
   sBody.innerHTML = state.students.length ? state.students.map(function(s){
+    var isEditing = s.id === editingStudentId;
+
     var waLink = (!s.is_paid && s.phone) ? whatsappLink(s.phone, buildPixMessage()) : null;
     var waCell = waLink
       ? '<a class="whatsapp-link" href="' + waLink + '" target="_blank" rel="noopener" aria-label="Cobrar ' + escapeHtml(s.student_name) + ' pelo WhatsApp">' + whatsappIcon() + '</a>'
       : '';
-    return '<tr class="' + (s.is_paid ? "paid" : "") + '">' +
-      '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong>' + (s.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '') + (s.guardian_name ? '<span>' + escapeHtml(s.guardian_name) + '</span>' : '') + '</td>' +
-      '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
+
+    var nameCell = isEditing
+      ? '<input type="text" class="edit-input" data-edit-student-name="' + s.id + '" value="' + escapeHtml(s.student_name) + '" placeholder="Nome">' +
+        '<input type="text" class="edit-input" data-edit-student-detail="' + s.id + '" value="' + escapeHtml(s.guardian_name || "") + '" placeholder="Detalhe (opcional)" style="margin-top:4px">' +
+        '<input type="tel" class="edit-input" data-edit-student-phone="' + s.id + '" value="' + escapeHtml(s.phone || "") + '" placeholder="WhatsApp (opcional)" style="margin-top:4px">'
+      : '<strong>' + escapeHtml(s.student_name) + '</strong>' + (s.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '') + (s.guardian_name ? '<span>' + escapeHtml(s.guardian_name) + '</span>' : '');
+
+    var feeCell = isEditing
+      ? '<input type="number" step="0.01" min="0" class="edit-input" data-edit-student-fee="' + s.id + '" value="' + Number(s.monthly_fee).toFixed(2) + '">'
+      : brl(Number(s.monthly_fee));
+
+    var actionCell = isEditing
+      ? '<span class="row-actions"><button class="row-save" type="button" data-save-student="' + s.id + '" aria-label="Salvar alterações">' + checkIcon() + '</button><button class="row-cancel" type="button" data-cancel-student="' + s.id + '" aria-label="Cancelar edição">' + xIcon() + '</button></span>'
+      : '<span class="row-actions"><button class="row-edit" type="button" data-open-edit-student="' + s.id + '" aria-label="Editar ' + escapeHtml(s.student_name) + '">' + editPencilIcon() + '</button><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></span>';
+
+    return '<tr class="' + (s.is_paid ? "paid" : "") + (isEditing ? " editing-row" : "") + '" data-student-row="' + s.id + '">' +
+      '<td class="name-cell">' + nameCell + '</td>' +
+      '<td class="num mensalidade">' + feeCell + '</td>' +
       '<td><input type="text" inputmode="numeric" maxlength="5" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
       '<td class="chk">' + waCell + '</td>' +
-      '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
+      '<td class="chk chk-actions">' + actionCell + '</td>' +
       '</tr>';
   }).join("") : '<tr class="empty-row"><td colspan="6">Nenhum registro cadastrado ainda.</td></tr>';
   document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " item" : " itens");
@@ -1147,9 +1188,11 @@ function updateTotals(){
   // quebra por categoria em si, filtrar destruiria a comparação entre elas).
   var totalCartao = state.expenses.filter(function(e){ return isCreditCardCategory(e.category); }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
   var totalPix = state.expenses.filter(function(e){ return isPixCategory(e.category); }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
-  var totalOutras = totalDespesas - totalCartao - totalPix;
+  var totalCaixinha = state.expenses.filter(function(e){ return isCaixinhaCategory(e.category); }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var totalOutras = totalDespesas - totalCartao - totalPix - totalCaixinha;
   document.getElementById("foot-cartao").textContent = brl(totalCartao);
   document.getElementById("foot-pix").textContent = brl(totalPix);
+  document.getElementById("foot-caixinha").textContent = brl(totalCaixinha);
   document.getElementById("foot-outras").textContent = brl(totalOutras);
 
   var pct = totalDespesas > 0 ? (pago / totalDespesas) * 100 : 0;
@@ -1188,6 +1231,12 @@ document.getElementById("expenses-body").addEventListener("change", function(ev)
           exp.is_paid = wasPaid; // reverte — não persistiu de verdade
           render();
           showError('Não foi possível marcar "' + exp.description + '" como pago. Veja o console (F12) para detalhes.');
+          return;
+        }
+        if(isCaixinhaCategory(exp.category)){
+          // Confirmar o pagamento é o "depósito" de verdade — soma na reserva
+          // quando marca, desfaz quando desmarca (ex.: engano).
+          applyCaixinhaDeposit(ev.target.checked ? Number(exp.amount) : -Number(exp.amount));
         }
       });
     }
@@ -1310,21 +1359,71 @@ document.getElementById("expenses-body").addEventListener("dblclick", function(e
 // ---- eventos: alunos ----
 
 document.getElementById("students-body").addEventListener("click", function(ev){
-  var btn = ev.target.closest("[data-remove-student]");
-  if(!btn) return;
-  var id = btn.getAttribute("data-remove-student");
-  var removed = state.students.find(function(s){ return s.id === id; });
-  state.students = state.students.filter(function(s){ return s.id !== id; });
-  state.receitaManual = null;
-  render();
-  removeStudent(id).then(function(ok){
-    if(!ok && removed){
-      state.students.push(removed);
-      state.receitaManual = null;
+  var openBtn = ev.target.closest("[data-open-edit-student]");
+  if(openBtn){
+    editingStudentId = openBtn.getAttribute("data-open-edit-student");
+    render();
+    return;
+  }
+
+  var cancelBtn = ev.target.closest("[data-cancel-student]");
+  if(cancelBtn){
+    editingStudentId = null;
+    render();
+    return;
+  }
+
+  var saveBtn = ev.target.closest("[data-save-student]");
+  if(saveBtn){
+    var saveId = saveBtn.getAttribute("data-save-student");
+    var stu = state.students.find(function(s){ return s.id === saveId; });
+    if(!stu) return;
+    var nameInput = document.querySelector('[data-edit-student-name="' + saveId + '"]');
+    var detailInput = document.querySelector('[data-edit-student-detail="' + saveId + '"]');
+    var phoneInput = document.querySelector('[data-edit-student-phone="' + saveId + '"]');
+    var feeInput = document.querySelector('[data-edit-student-fee="' + saveId + '"]');
+    var newName = nameInput.value.trim();
+    var newDetail = detailInput.value.trim();
+    var newPhone = phoneInput.value.trim();
+    var newFee = parseFloat(feeInput.value);
+    if(!newName || isNaN(newFee)){ showError("Nome e valor são obrigatórios."); return; }
+    var patch = { student_name: newName, guardian_name: newDetail, phone: newPhone || null, monthly_fee: newFee };
+    saveBtn.disabled = true;
+    updateStudent(saveId, patch).then(function(ok){
+      saveBtn.disabled = false;
+      if(!ok){ showError('Não foi possível salvar as alterações de "' + newName + '". Veja o console (F12) para detalhes.'); return; }
+      Object.assign(stu, patch);
+      editingStudentId = null;
+      state.receitaManual = null; // recalcula automaticamente se a mensalidade mudou
       render();
-      showError('Não foi possível remover "' + removed.student_name + '". Veja o console (F12) para detalhes.');
-    }
-  });
+    });
+    return;
+  }
+
+  var delBtn = ev.target.closest("[data-remove-student]");
+  if(delBtn){
+    var id = delBtn.getAttribute("data-remove-student");
+    var removed = state.students.find(function(s){ return s.id === id; });
+    state.students = state.students.filter(function(s){ return s.id !== id; });
+    state.receitaManual = null;
+    render();
+    removeStudent(id).then(function(ok){
+      if(!ok && removed){
+        state.students.push(removed);
+        state.receitaManual = null;
+        render();
+        showError('Não foi possível remover "' + removed.student_name + '". Veja o console (F12) para detalhes.');
+      }
+    });
+  }
+});
+
+document.getElementById("students-body").addEventListener("dblclick", function(ev){
+  if(ev.target.closest("input, button, a")) return;
+  var row = ev.target.closest("[data-student-row]");
+  if(!row) return;
+  editingStudentId = row.getAttribute("data-student-row");
+  render();
 });
 
 document.getElementById("students-body").addEventListener("change", function(ev){
@@ -1408,6 +1507,10 @@ document.getElementById("mark-all-expenses-paid").addEventListener("click", func
   Promise.all(pending.map(function(e){ return updateExpense(e.id, { is_paid: true }); })).then(function(results){
     var failed = results.filter(function(ok){ return !ok; }).length;
     if(failed) showError(failed + " despesa(s) não foram salvas. Veja o console (F12) para detalhes.");
+    var depositado = pending.reduce(function(sum, e, i){
+      return results[i] && isCaixinhaCategory(e.category) ? sum + Number(e.amount) : sum;
+    }, 0);
+    if(depositado > 0) applyCaixinhaDeposit(depositado);
   });
 });
 
