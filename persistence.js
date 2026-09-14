@@ -50,6 +50,8 @@ const DEFAULT_SETTINGS = {
   workspace_subtitle: "",
   revenue_section_title: "Receitas & Clientes",
   item_label: "Cliente / Serviço",
+  pix_key: "",
+  emergency_fund: 0,
 };
 
 // Conta original do painel — se um dia rodar sem o backfill manual de SQL
@@ -61,6 +63,8 @@ const KNOWN_ACCOUNT_DEFAULTS = {
     workspace_subtitle: "Mensalidades de alunos e despesas do mês, com baixa em tempo real.",
     revenue_section_title: "Alunos & mensalidades",
     item_label: "Aluno",
+    pix_key: "92984959683",
+    emergency_fund: 0,
   },
 };
 
@@ -142,10 +146,10 @@ async function fetchStudents(month, year, userId) {
 // Insere um novo aluno/receita neste mês/ano. Devolve a linha salva (com o id
 // real do Supabase) ou null se a gravação falhar. userId é o id da sessão
 // ativa. isFixed marca a receita para ser clonada automaticamente todo mês
-// (ver cloneFixedStudentsIfEmpty) — não fixas pertencem só a este mês.
-export async function insertStudent({ studentName, guardianName, monthlyFee, month, year, userId, isFixed }) {
+// (ver ensureFixedStudents) — não fixas pertencem só a este mês.
+export async function insertStudent({ studentName, guardianName, monthlyFee, phone, month, year, userId, isFixed }) {
   const payload = {
-    student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee,
+    student_name: studentName, guardian_name: guardianName, monthly_fee: monthlyFee, phone: phone || null,
     is_fixed: !!isFixed, is_paid: false, payment_date: null, month, year, user_id: userId,
   };
   if (!isSupabaseEnabled) {
@@ -236,20 +240,26 @@ async function fetchFixedStudentTemplates(month, year, userId) {
   }
 }
 
-// Se o mês/ano informado ainda não tiver nenhum aluno/receita, clona as fixas
-// mais recentes do usuário (com "Pago" zerado) para este mês. Sem nenhuma
-// fixa cadastrada, o mês fica vazio de verdade.
-async function cloneFixedStudentsIfEmpty(month, year, userId) {
+// Garante que toda receita fixa do usuário já exista neste mês/ano — não só
+// quando o mês está totalmente vazio. Antes, uma parcela de cartão ou
+// qualquer outro registro isolado no mês fazia a checagem de "lista vazia"
+// falhar e as fixas nunca eram instanciadas; agora cada fixa é conferida por
+// student_name individualmente e só a que ainda falta é inserida.
+async function ensureFixedStudents(month, year, userId) {
   const current = await fetchStudents(month, year, userId);
-  if (current.length) return current;
 
   const templates = latestByKey(await fetchFixedStudentTemplates(month, year, userId), (s) => s.student_name);
   if (!templates.length) return current;
 
-  const toInsert = templates.map((s) => ({
+  const existingNames = new Set(current.map((s) => s.student_name));
+  const missing = templates.filter((s) => !existingNames.has(s.student_name));
+  if (!missing.length) return current;
+
+  const toInsert = missing.map((s) => ({
     student_name: s.student_name,
     guardian_name: s.guardian_name,
     monthly_fee: s.monthly_fee,
+    phone: s.phone || null,
     is_fixed: true,
     is_paid: false,
     payment_date: null,
@@ -262,16 +272,16 @@ async function cloneFixedStudentsIfEmpty(month, year, userId) {
     const state = readLocal();
     state.students = (state.students || []).concat(rows);
     writeLocal(state);
-    return rows;
+    return current.concat(rows);
   }
 
   try {
     const { data, error } = await supabase.from("students").insert(toInsert).select();
-    if (error) { logSupabaseError("cloneFixedStudentsIfEmpty", { month, year, toInsert }, error); return []; }
-    return data || [];
+    if (error) { logSupabaseError("ensureFixedStudents", { month, year, toInsert }, error); return current; }
+    return current.concat(data || []);
   } catch (err) {
-    logSupabaseError("cloneFixedStudentsIfEmpty", { month, year, toInsert }, err);
-    return [];
+    logSupabaseError("ensureFixedStudents", { month, year, toInsert }, err);
+    return current;
   }
 }
 
@@ -330,7 +340,7 @@ export async function togglePaid(id, isPaid) {
 // ou null se a gravação falhar — a UI deve tratar null como erro visível,
 // nunca manter a linha só no estado local. userId é o id da sessão ativa.
 // isFixed marca a despesa para ser clonada automaticamente todo mês (ver
-// cloneFixedExpensesIfEmpty) — despesas não fixas pertencem só a este mês.
+// ensureFixedExpenses) — despesas não fixas pertencem só a este mês.
 export async function insertExpense({ description, category, amount, dueDate, month, year, userId, isFixed, categoryColor }) {
   const payload = {
     description, category, amount, due_date: dueDate || null, is_paid: false, is_fixed: !!isFixed,
@@ -444,21 +454,27 @@ async function fetchFixedExpenseTemplates(month, year, userId) {
   }
 }
 
-// Se o mês/ano informado ainda não tiver nenhuma despesa, clona as fixas mais
-// recentes do usuário (com "Pago" zerado) para este mês. Sem nenhuma despesa
-// fixa cadastrada, o mês simplesmente fica vazio — não existe modelo padrão
-// fixo no código. userId é obrigatório: sem ele o insert é barrado pelo RLS.
-async function cloneFixedExpensesIfEmpty(month, year, userId) {
+// Garante que toda despesa fixa do usuário já exista neste mês/ano — não só
+// quando o mês está totalmente vazio. Antes, uma parcela de cartão de crédito
+// (ou qualquer despesa avulsa) já presente no mês fazia a checagem de "lista
+// vazia" falhar, e as fixas de verdade (Aluguel, Internet etc.) nunca eram
+// instanciadas junto. Agora cada fixa é conferida por description
+// individualmente e só a que ainda falta naquele mês é inserida.
+async function ensureFixedExpenses(month, year, userId) {
   const current = await fetchExpenses(month, year, userId);
-  if (current.length) return current;
 
   const templates = latestByKey(await fetchFixedExpenseTemplates(month, year, userId), (e) => e.description);
   if (!templates.length) return current;
 
-  const toInsert = templates.map((e) => ({
+  const existingDescriptions = new Set(current.map((e) => e.description));
+  const missing = templates.filter((e) => !existingDescriptions.has(e.description));
+  if (!missing.length) return current;
+
+  const toInsert = missing.map((e) => ({
     description: e.description,
     category: e.category,
     amount: e.amount,
+    category_color: e.category_color || null,
     is_fixed: true,
     is_paid: false,
     due_date: null,
@@ -471,16 +487,16 @@ async function cloneFixedExpensesIfEmpty(month, year, userId) {
     const state = readLocal();
     state.expenses = (state.expenses || []).concat(rows);
     writeLocal(state);
-    return rows;
+    return current.concat(rows);
   }
 
   try {
     const { data, error } = await supabase.from("expenses").insert(toInsert).select();
-    if (error) { logSupabaseError("cloneFixedExpensesIfEmpty", { month, year, toInsert }, error); return []; }
-    return data || [];
+    if (error) { logSupabaseError("ensureFixedExpenses", { month, year, toInsert }, error); return current; }
+    return current.concat(data || []);
   } catch (err) {
-    logSupabaseError("cloneFixedExpensesIfEmpty", { month, year, toInsert }, err);
-    return [];
+    logSupabaseError("ensureFixedExpenses", { month, year, toInsert }, err);
+    return current;
   }
 }
 
@@ -492,10 +508,45 @@ async function cloneFixedExpensesIfEmpty(month, year, userId) {
 // sem nenhuma fixa cadastrada, o mês fica vazio de verdade.
 export async function loadMonthData(month, year, userId) {
   const [students, expenses] = await Promise.all([
-    cloneFixedStudentsIfEmpty(month, year, userId),
-    cloneFixedExpensesIfEmpty(month, year, userId),
+    ensureFixedStudents(month, year, userId),
+    ensureFixedExpenses(month, year, userId),
   ]);
   return { students, expenses };
+}
+
+// ---- visão anual ----
+
+function buildYearSummary(expenses, students) {
+  const months = [];
+  for (let m = 1; m <= 12; m++) {
+    const revenue = students.filter((s) => s.month === m).reduce((a, s) => a + Number(s.monthly_fee || 0), 0);
+    const expense = expenses.filter((e) => e.month === m).reduce((a, e) => a + Number(e.amount || 0), 0);
+    months.push({ month: m, revenue, expense, profit: revenue - expense });
+  }
+  return months;
+}
+
+// Resumo dos 12 meses do ano informado: Receitas, Despesas e Lucro líquido
+// por mês, somando todos os registros existentes (pagos ou não). Devolve
+// null se a busca falhar — a UI deve tratar isso como erro visível.
+export async function fetchYearSummary(year, userId) {
+  if (!isSupabaseEnabled) {
+    const local = readLocal();
+    const expenses = (local.expenses || []).filter((e) => e.year === year);
+    const students = (local.students || []).filter((s) => s.year === year);
+    return buildYearSummary(expenses, students);
+  }
+  try {
+    const [{ data: expenses, error: expErr }, { data: students, error: stuErr }] = await Promise.all([
+      supabase.from("expenses").select("month, amount").eq("year", year).eq("user_id", userId),
+      supabase.from("students").select("month, monthly_fee").eq("year", year).eq("user_id", userId),
+    ]);
+    if (expErr || stuErr) { logSupabaseError("fetchYearSummary", { year, userId }, expErr || stuErr); return null; }
+    return buildYearSummary(expenses || [], students || []);
+  } catch (err) {
+    logSupabaseError("fetchYearSummary", { year, userId }, err);
+    return null;
+  }
 }
 
 // ---- tempo real ----

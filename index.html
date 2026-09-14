@@ -9,6 +9,13 @@
 <meta property="og:description" content="Controle receitas, despesas e pagamentos do seu negócio em um painel financeiro simples e seguro.">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2312503A'/%3E%3Ctext x='50' y='62' font-size='55' text-anchor='middle'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#12503A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Gestão Pro">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -156,7 +163,7 @@
 
   /* stat grid */
   .stat-grid{
-    display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:26px;
+    display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin-bottom:26px;
   }
   .stat-card{
     background:var(--surface); border:1px solid var(--border); border-radius:14px;
@@ -177,6 +184,10 @@
   .stat-card.pendente .stat-icon{ background:var(--warning-soft); color:var(--warning); }
   .stat-card.pago .stat-icon{ background:var(--positive-soft); color:var(--positive); }
   .stat-card.saldo .stat-icon{ background:var(--surface-alt); color:var(--text); }
+  .stat-card.caixinha .stat-icon{ background:var(--accent-soft); color:var(--accent-strong); }
+  .caixinha-input input{ width:100%; }
+  .btn.year-view-btn{ border:1px solid var(--border); background:var(--surface); color:var(--text); box-shadow:var(--shadow); padding:8px 14px; border-radius:999px; white-space:nowrap; }
+  .btn.year-view-btn:hover{ background:var(--surface-alt); }
   .stat-value{ font-size:23px; font-weight:600; letter-spacing:-0.01em; }
   .stat-value.warn{ color:var(--warning); }
   .stat-value.good{ color:var(--positive); }
@@ -310,6 +321,23 @@
     width:150px; padding:8px 10px 8px 30px; border-radius:9px; border:1px solid var(--border);
     background:var(--surface); color:var(--text); font-size:14.5px; font-weight:600; text-align:right;
   }
+  .pix-box{ background:var(--surface-alt); }
+  .pix-box label{ color:var(--text); }
+  .pix-input{
+    min-width:180px; flex:1; padding:8px 12px; border-radius:9px; border:1px solid var(--border);
+    background:var(--surface); color:var(--text); font-size:13.5px;
+  }
+  .btn.mark-all-btn{
+    border:1px dashed var(--border); border-radius:10px; padding:8px 14px; margin-top:12px; font-size:12.5px;
+  }
+  .btn.mark-all-btn:hover{ background:var(--surface-alt); }
+
+  .whatsapp-link{
+    display:inline-flex; align-items:center; justify-content:center; color:var(--positive);
+    border-radius:6px; padding:4px;
+  }
+  .whatsapp-link:hover{ background:var(--positive-soft); }
+  .whatsapp-link svg{ width:16px; height:16px; display:block; }
 
   /* totals footer for expenses */
   .exp-footer{
@@ -318,6 +346,27 @@
   .exp-footer .item{ display:flex; flex-direction:column; gap:2px; }
   .exp-footer .item .k{ font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; }
   .exp-footer .item .v{ font-size:15px; font-weight:600; }
+  .category-totals{ border-top-style:solid; padding-top:12px; margin-top:10px; }
+  .category-totals .v{ font-size:13.5px; }
+  .filter-label-hint{ font-size:11px; color:var(--text-muted); font-weight:600; }
+
+  .filter-pills{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .filter-pill{
+    border:1px solid var(--border); background:var(--surface); color:var(--text-muted);
+    font-size:12px; font-weight:600; padding:6px 13px; border-radius:999px; cursor:pointer;
+  }
+  .filter-pill:hover{ background:var(--surface-alt); }
+  .filter-pill.active{ background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  .due-quick-pills{ display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+  .quick-pill{
+    border:1px dashed var(--border); background:none; color:var(--text-muted);
+    font-size:11px; font-weight:600; padding:3px 8px; border-radius:999px; cursor:pointer;
+  }
+  .quick-pill:hover{ background:var(--surface-alt); color:var(--text); border-style:solid; }
+
+  .due-cell{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; }
+  .overdue-label{ font-size:9.5px; font-weight:700; color:var(--critical); white-space:nowrap; }
 
   .progress{
     height:8px; border-radius:999px; overflow:hidden; background:var(--warning-soft); display:flex; margin-top:12px;
@@ -365,6 +414,28 @@
     border:1px solid var(--critical); border-radius:10px; padding:10px 16px;
     font-size:13px; font-weight:600; box-shadow:var(--shadow); z-index:50;
   }
+
+  /* modal: visão anual */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(10,16,12,0.45); display:flex; align-items:center;
+    justify-content:center; padding:24px; z-index:60;
+  }
+  .modal-overlay[hidden]{ display:none; }
+  .modal-card{
+    width:100%; max-width:620px; max-height:85vh; overflow-y:auto; background:var(--surface);
+    border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow); padding:22px 24px 26px;
+  }
+  .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .modal-head h2{ font-size:18px; font-weight:600; }
+  .modal-close{ border:none; background:none; color:var(--text-muted); cursor:pointer; padding:6px; border-radius:8px; line-height:0; }
+  .modal-close:hover{ background:var(--surface-alt); color:var(--text); }
+  .modal-close svg{ width:16px; height:16px; display:block; }
+  .year-total-row td{ font-weight:700; border-top:2px solid var(--border); border-bottom:none; }
+  .year-total-row .num{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums; }
+  #year-view-body td.num{ font-family:"IBM Plex Mono", monospace; font-variant-numeric:tabular-nums; }
+  .profit-negative{ color:var(--critical); }
+  .profit-positive{ color:var(--positive); }
+
   /* autenticação */
   #auth-screen{
     min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
@@ -476,6 +547,7 @@
       <button class="month-btn" id="month-prev" type="button" aria-label="Mês anterior">‹</button>
       <span class="month-pill" id="month-label">Setembro · 2026</span>
       <button class="month-btn" id="month-next" type="button" aria-label="Próximo mês">›</button>
+      <button class="btn year-view-btn" id="open-year-view" type="button">Visão anual <span id="year-view-year">2026</span></button>
     </div>
   </div>
 
@@ -512,6 +584,17 @@
       <div class="stat-value num" id="stat-saldo">R$ 0,00</div>
       <div class="stat-note">Receita − pendente − pago</div>
     </div>
+    <div class="stat-card caixinha">
+      <div class="stat-top">
+        <span class="stat-label">Reserva / Caixinha</span>
+        <span class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 8V6a2 2 0 0 1 2-2h3.5"/><path d="M21 8V6a2 2 0 0 0-2-2h-3.5"/><path d="M12 4v4"/></svg></span>
+      </div>
+      <div class="currency-input caixinha-input">
+        <span>R$</span>
+        <input id="emergency-fund-input" type="number" step="0.01" min="0" inputmode="decimal" aria-label="Valor guardado na reserva">
+      </div>
+      <div class="stat-note">Guardado para emergências</div>
+    </div>
   </div>
 
   <div class="grid">
@@ -533,10 +616,10 @@
             <thead>
               <tr>
                 <th><span class="editable-wrap"><span class="editable" id="item-label-th" contenteditable="true" spellcheck="false">Aluno</span><svg class="edit-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span></th>
-                <th class="num">Mensalidade</th><th>Data pgto</th><th class="chk">Pago</th><th class="chk"></th>
+                <th class="num">Mensalidade</th><th>Data pgto</th><th class="chk">Pago</th><th class="chk"></th><th class="chk"></th>
               </tr>
             </thead>
-            <tbody id="students-body"><tr class="empty-row"><td colspan="5">Carregando alunos…</td></tr></tbody>
+            <tbody id="students-body"><tr class="empty-row"><td colspan="6">Carregando alunos…</td></tr></tbody>
           </table>
         </div>
 
@@ -551,10 +634,19 @@
           </div>
         </div>
 
+        <div class="receita-box pix-box">
+          <div>
+            <label for="pix-key-input">Chave Pix</label>
+            <p class="hint">Usada na cobrança rápida por WhatsApp</p>
+          </div>
+          <input id="pix-key-input" type="text" placeholder="Sua chave Pix" class="pix-input">
+        </div>
+
         <div class="exp-footer">
           <div class="item"><span class="k">Total recebido</span><span class="v num" id="alunos-recebido" style="color:var(--positive)">R$ 0,00</span></div>
           <div class="item"><span class="k">A receber</span><span class="v num" id="alunos-pendente" style="color:var(--warning)">R$ 0,00</span></div>
         </div>
+        <button type="button" class="btn btn-ghost mark-all-btn" id="mark-all-students-paid">Marcar todas como recebidas</button>
 
         <button class="add-toggle" id="toggle-student" type="button">+ Novo aluno</button>
         <form class="add-form" id="form-student">
@@ -562,6 +654,7 @@
             <div class="field"><label for="s-aluno" id="item-label-form">Aluno</label><input id="s-aluno" required placeholder="Nome"></div>
             <div class="field"><label for="s-resp">Detalhe (opcional)</label><input id="s-resp" placeholder="Ex.: responsável, dia da semana…"></div>
             <div class="field"><label for="s-valor">Mensalidade (R$)</label><input id="s-valor" type="number" step="0.01" min="0" required placeholder="180"></div>
+            <div class="field"><label for="s-phone">WhatsApp / Telefone (opcional)</label><input id="s-phone" type="tel" placeholder="(DDD) 9XXXX-XXXX"></div>
           </div>
           <label class="checkbox-field"><input type="checkbox" id="s-fixed" checked> Receita fixa — repetir todos os meses</label>
           <div class="actions">
@@ -582,6 +675,13 @@
         </div>
       </div>
       <div class="panel-body">
+        <div class="filter-pills" id="expense-filter-pills">
+          <button type="button" class="filter-pill active" data-cat-filter="all">Todas</button>
+          <button type="button" class="filter-pill" data-cat-filter="cartao">Cartão de crédito</button>
+          <button type="button" class="filter-pill" data-cat-filter="pix">Pix</button>
+          <button type="button" class="filter-pill" data-cat-filter="outras">Outras</button>
+        </div>
+
         <div class="table-wrap">
           <table>
             <thead>
@@ -593,10 +693,16 @@
 
         <div class="progress"><div class="fill" id="progress-fill" style="width:0%"></div></div>
         <div class="exp-footer">
-          <div class="item"><span class="k">Pendente</span><span class="v num" id="foot-pendente" style="color:var(--warning)">R$ 0,00</span></div>
-          <div class="item"><span class="k">Pago</span><span class="v num" id="foot-pago" style="color:var(--positive)">R$ 0,00</span></div>
-          <div class="item"><span class="k">Total de despesas</span><span class="v num" id="foot-total">R$ 0,00</span></div>
+          <div class="item"><span class="k" id="foot-pendente-label">Pendente</span><span class="v num" id="foot-pendente" style="color:var(--warning)">R$ 0,00</span></div>
+          <div class="item"><span class="k" id="foot-pago-label">Pago</span><span class="v num" id="foot-pago" style="color:var(--positive)">R$ 0,00</span></div>
+          <div class="item"><span class="k" id="foot-total-label">Total de despesas</span><span class="v num" id="foot-total">R$ 0,00</span></div>
         </div>
+        <div class="exp-footer category-totals">
+          <div class="item"><span class="k">Total cartão</span><span class="v num" id="foot-cartao">R$ 0,00</span></div>
+          <div class="item"><span class="k">Total Pix</span><span class="v num" id="foot-pix">R$ 0,00</span></div>
+          <div class="item"><span class="k">Outras categorias</span><span class="v num" id="foot-outras">R$ 0,00</span></div>
+        </div>
+        <button type="button" class="btn btn-ghost mark-all-btn" id="mark-all-expenses-paid">Marcar todas como pagas</button>
 
         <button class="add-toggle" id="toggle-expense" type="button">+ Nova despesa</button>
         <form class="add-form" id="form-expense">
@@ -607,7 +713,17 @@
               <input id="e-cat" required placeholder="Ex.: Pix, Aluguel, Fornecedores…" list="cat-list">
               <datalist id="cat-list"></datalist>
             </div>
-            <div class="field"><label for="e-due">Vencimento</label><input id="e-due" type="text" inputmode="numeric" maxlength="5" placeholder="DD/MM" required></div>
+            <div class="field">
+              <label for="e-due">Vencimento</label>
+              <input id="e-due" type="text" inputmode="numeric" maxlength="5" placeholder="DD/MM" required>
+              <div class="due-quick-pills">
+                <button type="button" class="quick-pill" data-due-quick="today">Hoje</button>
+                <button type="button" class="quick-pill" data-due-quick="tomorrow">Amanhã</button>
+                <button type="button" class="quick-pill" data-due-quick="10">Dia 10</button>
+                <button type="button" class="quick-pill" data-due-quick="20">Dia 20</button>
+                <button type="button" class="quick-pill" data-due-quick="30">Dia 30</button>
+              </div>
+            </div>
             <div class="field"><label for="e-valor">Valor (R$)</label><input id="e-valor" type="number" step="0.01" min="0" required placeholder="60"></div>
             <div class="field"><label>Cor da categoria</label><div class="color-picker" id="e-color-picker"></div></div>
           </div>
@@ -628,12 +744,41 @@
 
 <div class="error-toast" id="error-toast" hidden></div>
 
+<div class="modal-overlay" id="year-view-overlay" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="year-view-title">
+    <div class="modal-head">
+      <h2 id="year-view-title">Visão anual</h2>
+      <button type="button" class="modal-close" id="year-view-close" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Mês</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Lucro líquido</th></tr>
+          </thead>
+          <tbody id="year-view-body"></tbody>
+          <tfoot>
+            <tr class="year-total-row">
+              <td>Total do ano</td>
+              <td class="num" id="year-total-revenue">R$ 0,00</td>
+              <td class="num" id="year-total-expense">R$ 0,00</td>
+              <td class="num" id="year-total-profit">R$ 0,00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
   updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
   removeStudent, toggleStudentPaid, updateStudent, loadMonthData, subscribeRealtime,
-  getOrCreateSettings, updateSettings, insertInstallments
+  getOrCreateSettings, updateSettings, insertInstallments, fetchYearSummary
 } from "./persistence.js";
 import { getSession, signIn, signUp, signOut, onAuthChange } from "./auth.js";
 
@@ -647,6 +792,7 @@ var currentSettings = null;
 var unsubscribeRealtime = null;
 var editingExpenseId = null;
 var draftColors = {}; // cor escolhida na hora, por id de despesa, enquanto a linha está em edição
+var expenseCategoryFilter = "all"; // all | cartao | pix | outras
 
 var CATEGORY_COLORS = [
   { hex: "#3b82f6", name: "Azul",     lightBg: "#dbe9fe", lightText: "#1d4ed8", darkBg: "#14203a", darkText: "#93bbfd" },
@@ -705,6 +851,12 @@ function renderSettings(settings){
   setEditableText(document.getElementById("item-label-th"), settings.item_label);
   document.getElementById("item-label-form").textContent = settings.item_label;
   document.getElementById("toggle-student").textContent = "+ Novo " + settings.item_label;
+
+  var pixInput = document.getElementById("pix-key-input");
+  if(document.activeElement !== pixInput) pixInput.value = settings.pix_key || "";
+
+  var fundInput = document.getElementById("emergency-fund-input");
+  if(document.activeElement !== fundInput) fundInput.value = Number(settings.emergency_fund || 0).toFixed(2);
 }
 
 // Liga um elemento contenteditable a um campo de user_settings: Enter
@@ -739,6 +891,34 @@ wireEditable(document.getElementById("item-label-th"), "item_label", function(va
   document.getElementById("toggle-student").textContent = "+ Novo " + value;
 });
 
+document.getElementById("pix-key-input").addEventListener("blur", function(ev){
+  var value = ev.target.value.trim();
+  if(value === (currentSettings.pix_key || "")) return;
+  var previous = currentSettings.pix_key;
+  currentSettings.pix_key = value;
+  updateSettings(currentUserId, { pix_key: value }).then(function(ok){
+    if(ok){ flashSaved(ev.target); return; }
+    currentSettings.pix_key = previous;
+    ev.target.value = previous || "";
+    showError("Não foi possível salvar a chave Pix. Veja o console (F12) para detalhes.");
+  });
+});
+
+document.getElementById("emergency-fund-input").addEventListener("blur", function(ev){
+  var value = parseFloat(ev.target.value);
+  if(isNaN(value) || value < 0) value = 0;
+  if(value === Number(currentSettings.emergency_fund || 0)){ ev.target.value = value.toFixed(2); return; }
+  var previous = currentSettings.emergency_fund;
+  currentSettings.emergency_fund = value;
+  ev.target.value = value.toFixed(2);
+  updateSettings(currentUserId, { emergency_fund: value }).then(function(ok){
+    if(ok){ flashSaved(ev.target); return; }
+    currentSettings.emergency_fund = previous;
+    ev.target.value = Number(previous || 0).toFixed(2);
+    showError("Não foi possível salvar a reserva. Veja o console (F12) para detalhes.");
+  });
+});
+
 // Accordion mobile/tablet (@media max-width:900px) — acima disso o botão fica
 // oculto via CSS e os painéis sempre ficam expandidos, mesmo com a classe.
 Array.prototype.forEach.call(document.querySelectorAll("[data-panel-toggle]"), function(btn){
@@ -766,9 +946,14 @@ function xIcon(){
 // Regex escapado por código (em vez de colar os caracteres de acento direto
 // no arquivo) pra não depender da codificação do editor/terminal ao salvar.
 var DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
+function normalizeCategoryText(category){
+  return String(category || "").normalize("NFD").replace(DIACRITICS_RE, "").toLowerCase().trim();
+}
 function isCreditCardCategory(category){
-  var n = String(category || "").normalize("NFD").replace(DIACRITICS_RE, "").toLowerCase();
-  return n.indexOf("cartao") !== -1;
+  return normalizeCategoryText(category).indexOf("cartao") !== -1;
+}
+function isPixCategory(category){
+  return normalizeCategoryText(category) === "pix";
 }
 // Desenha as pílulas de cor. targetAttr vira o nome do data-attribute usado
 // para identificar o alvo do clique (form novo, ou id da despesa em edição).
@@ -828,22 +1013,52 @@ function expensesSortedByDueDate(){
     return da < db ? -1 : (da > db ? 1 : 0);
   });
 }
+function matchesExpenseFilter(e, filter){
+  if(filter === "cartao") return isCreditCardCategory(e.category);
+  if(filter === "pix") return isPixCategory(e.category);
+  if(filter === "outras") return !isCreditCardCategory(e.category) && !isPixCategory(e.category);
+  return true; // "all"
+}
+var EXPENSE_FILTER_SUFFIX = { all: "", cartao: " (Cartão de crédito)", pix: " (Pix)", outras: " (Outras)" };
+
+function whatsappIcon(){
+  return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.44 9.9-9.9 0-2.64-1.03-5.13-2.9-6.99A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.24.68-1.4 1.3-1.93 1.38-.5.08-1.12.11-1.8-.11-.42-.13-.96-.31-1.65-.6-2.9-1.25-4.79-4.16-4.94-4.35-.14-.19-1.18-1.57-1.18-3 0-1.42.75-2.12 1.02-2.41.27-.29.58-.36.78-.36l.55.01c.18.01.42-.07.65.5.24.58.81 2 .88 2.14.07.15.12.32.02.51-.1.19-.15.31-.3.48-.15.17-.31.38-.44.51-.15.15-.3.31-.13.6.17.29.75 1.24 1.62 2.01 1.11.99 2.05 1.3 2.34 1.45.29.15.46.13.63-.08.17-.21.72-.84.91-1.13.19-.29.38-.24.64-.15.26.1 1.65.78 1.93.92.28.14.47.21.54.33.07.12.07.7-.17 1.38Z"/></svg>';
+}
+// Mensagem de cobrança pré-formatada — some a frase da chave Pix se ela ainda não estiver configurada.
+function buildPixMessage(){
+  var pix = (currentSettings && currentSettings.pix_key) ? String(currentSettings.pix_key).trim() : "";
+  var msg = "Olá, Bom dia! Tudo bem? Passando para lembrar do pagamento das aulas de inglês!";
+  if(pix) msg += " Segue a chave Pix: " + pix + ".";
+  msg += " Obrigada!";
+  return msg;
+}
+function whatsappLink(phone, message){
+  var digits = String(phone || "").replace(/\D/g, "");
+  if(!digits) return null;
+  if(digits.length <= 11) digits = "55" + digits; // já é DDD+número, falta o código do país
+  return "https://wa.me/" + digits + "?text=" + encodeURIComponent(message);
+}
 
 function render(){
   var sBody = document.getElementById("students-body");
   sBody.innerHTML = state.students.length ? state.students.map(function(s){
+    var waLink = (!s.is_paid && s.phone) ? whatsappLink(s.phone, buildPixMessage()) : null;
+    var waCell = waLink
+      ? '<a class="whatsapp-link" href="' + waLink + '" target="_blank" rel="noopener" aria-label="Cobrar ' + escapeHtml(s.student_name) + ' pelo WhatsApp">' + whatsappIcon() + '</a>'
+      : '';
     return '<tr class="' + (s.is_paid ? "paid" : "") + '">' +
       '<td class="name-cell"><strong>' + escapeHtml(s.student_name) + '</strong>' + (s.is_fixed ? '<span class="fixed-badge">Fixa</span>' : '') + (s.guardian_name ? '<span>' + escapeHtml(s.guardian_name) + '</span>' : '') + '</td>' +
       '<td class="num mensalidade">' + brl(Number(s.monthly_fee)) + '</td>' +
       '<td><input type="text" inputmode="numeric" maxlength="5" class="date-input" data-payment-date="' + s.id + '" value="' + (s.payment_date ? formatShortDate(s.payment_date) : "") + '" placeholder="DD/MM" aria-label="Data de pagamento de ' + escapeHtml(s.student_name) + '"></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-student-paid="' + s.id + '" ' + (s.is_paid ? "checked" : "") + ' aria-label="Marcar mensalidade de ' + escapeHtml(s.student_name) + ' como paga"></td>' +
+      '<td class="chk">' + waCell + '</td>' +
       '<td class="chk"><button class="row-del" data-remove-student="' + s.id + '" aria-label="Remover ' + escapeHtml(s.student_name) + '">' + trashIcon() + '</button></td>' +
       '</tr>';
-  }).join("") : '<tr class="empty-row"><td colspan="5">Nenhum registro cadastrado ainda.</td></tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="6">Nenhum registro cadastrado ainda.</td></tr>';
   document.getElementById("alunos-count").textContent = state.students.length + (state.students.length === 1 ? " item" : " itens");
 
   var eBody = document.getElementById("expenses-body");
-  var sortedExpenses = expensesSortedByDueDate();
+  var sortedExpenses = expensesSortedByDueDate().filter(function(e){ return matchesExpenseFilter(e, expenseCategoryFilter); });
   eBody.innerHTML = sortedExpenses.length ? sortedExpenses.map(function(e){
     var status = dueStatus(e);
     var isEditing = e.id === editingExpenseId;
@@ -862,15 +1077,17 @@ function render(){
       ? '<span class="row-actions"><button class="row-save" type="button" data-save-expense="' + e.id + '" aria-label="Salvar alterações">' + checkIcon() + '</button><button class="row-cancel" type="button" data-cancel-expense="' + e.id + '" aria-label="Cancelar edição">' + xIcon() + '</button></span>'
       : '<span class="row-actions"><button class="row-edit" type="button" data-open-edit="' + e.id + '" aria-label="Editar ' + escapeHtml(e.description) + '">' + editPencilIcon() + '</button><button class="row-del" data-remove-expense="' + e.id + '" aria-label="Remover ' + escapeHtml(e.description) + '">' + trashIcon() + '</button></span>';
 
+    var dueCell = '<div class="due-cell"><input type="text" inputmode="numeric" maxlength="5" class="due-input' + (status ? " " + status : "") + '" data-edit-due="' + e.id + '" value="' + (e.due_date ? formatShortDate(e.due_date) : "") + '" placeholder="DD/MM" aria-label="Vencimento de ' + escapeHtml(e.description) + '">' + (status === "overdue" ? '<span class="overdue-label">Em atraso</span>' : '') + '</div>';
+
     return '<tr class="' + (e.is_paid ? "paid" : "") + (isEditing ? " editing-row" : "") + '" data-expense-row="' + e.id + '">' +
       '<td class="desc">' + descCell + '</td>' +
       '<td>' + catCell + '</td>' +
-      '<td><input type="text" inputmode="numeric" maxlength="5" class="due-input' + (status ? " " + status : "") + '" data-edit-due="' + e.id + '" value="' + (e.due_date ? formatShortDate(e.due_date) : "") + '" placeholder="DD/MM" aria-label="Vencimento de ' + escapeHtml(e.description) + '"></td>' +
+      '<td>' + dueCell + '</td>' +
       '<td class="num"><span class="value-edit"><span>R$</span><input type="number" step="0.01" min="0" class="value-input" data-edit-expense="' + e.id + '" value="' + Number(e.amount).toFixed(2) + '" aria-label="Valor de ' + escapeHtml(e.description) + '"></span></td>' +
       '<td class="chk"><input type="checkbox" data-toggle-expense="' + e.id + '" ' + (e.is_paid ? "checked" : "") + ' aria-label="Marcar ' + escapeHtml(e.description) + ' como pago"></td>' +
       '<td class="chk chk-actions">' + actionCell + '</td>' +
       '</tr>';
-  }).join("") : '<tr class="empty-row"><td colspan="6">Nenhuma despesa cadastrada em ' + MONTH_NAMES[currentMonth-1] + '/' + currentYear + '.</td></tr>';
+  }).join("") : '<tr class="empty-row"><td colspan="6">Nenhuma despesa' + (expenseCategoryFilter !== "all" ? " nesta categoria" : "") + ' cadastrada em ' + MONTH_NAMES[currentMonth-1] + '/' + currentYear + '.</td></tr>';
   document.getElementById("despesas-count").textContent = state.expenses.length + (state.expenses.length === 1 ? " conta" : " contas");
 
   var usedCats = state.expenses.map(function(e){ return e.category; });
@@ -894,6 +1111,8 @@ function updateTotals(){
   document.getElementById("alunos-recebido").textContent = brl(recebido);
   document.getElementById("alunos-pendente").textContent = brl(aReceber);
 
+  // Cards de topo (Receita/A pagar/Já pago/Saldo) sempre refletem o mês inteiro,
+  // sem filtro — são o resumo geral, independente do que está sendo listado.
   var pendente = state.expenses.filter(function(e){ return !e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
   var pago = state.expenses.filter(function(e){ return e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
   var totalDespesas = pendente + pago;
@@ -909,9 +1128,29 @@ function updateTotals(){
   saldoEl.classList.remove("warn", "good");
   saldoEl.classList.add(saldo < 0 ? "warn" : "good");
 
-  document.getElementById("foot-pendente").textContent = brl(pendente);
-  document.getElementById("foot-pago").textContent = brl(pago);
-  document.getElementById("foot-total").textContent = brl(totalDespesas);
+  // Rodapé do painel de despesas adapta ao filtro ativo, com o nome da
+  // categoria no rótulo pra ficar claro que não é o total geral do mês.
+  var filtered = state.expenses.filter(function(e){ return matchesExpenseFilter(e, expenseCategoryFilter); });
+  var pendenteF = filtered.filter(function(e){ return !e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var pagoF = filtered.filter(function(e){ return e.is_paid; }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var totalF = pendenteF + pagoF;
+  var suffix = EXPENSE_FILTER_SUFFIX[expenseCategoryFilter];
+
+  document.getElementById("foot-pendente-label").textContent = "Pendente" + suffix;
+  document.getElementById("foot-pago-label").textContent = "Pago" + suffix;
+  document.getElementById("foot-total-label").textContent = "Total de despesas" + suffix;
+  document.getElementById("foot-pendente").textContent = brl(pendenteF);
+  document.getElementById("foot-pago").textContent = brl(pagoF);
+  document.getElementById("foot-total").textContent = brl(totalF);
+
+  // Totais por categoria — sempre o mês inteiro, independente do filtro (é a
+  // quebra por categoria em si, filtrar destruiria a comparação entre elas).
+  var totalCartao = state.expenses.filter(function(e){ return isCreditCardCategory(e.category); }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var totalPix = state.expenses.filter(function(e){ return isPixCategory(e.category); }).reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var totalOutras = totalDespesas - totalCartao - totalPix;
+  document.getElementById("foot-cartao").textContent = brl(totalCartao);
+  document.getElementById("foot-pix").textContent = brl(totalPix);
+  document.getElementById("foot-outras").textContent = brl(totalOutras);
 
   var pct = totalDespesas > 0 ? (pago / totalDespesas) * 100 : 0;
   document.getElementById("progress-fill").style.width = pct.toFixed(1) + "%";
@@ -1144,6 +1383,46 @@ document.getElementById("receita-input").addEventListener("input", function(ev){
   updateTotals();
 });
 
+// ---- liquidação em lote ----
+
+document.getElementById("mark-all-students-paid").addEventListener("click", function(){
+  var pending = state.students.filter(function(s){ return !s.is_paid; });
+  if(!pending.length){ showError("Não há receitas pendentes neste mês."); return; }
+  if(!window.confirm("Marcar " + pending.length + " receita(s) pendente(s) como recebidas?")) return;
+
+  pending.forEach(function(s){ s.is_paid = true; s.payment_date = todayIso; });
+  render();
+  Promise.all(pending.map(function(s){ return toggleStudentPaid(s.id, true, todayIso); })).then(function(results){
+    var failed = results.filter(function(ok){ return !ok; }).length;
+    if(failed) showError(failed + " receita(s) não foram salvas. Veja o console (F12) para detalhes.");
+  });
+});
+
+document.getElementById("mark-all-expenses-paid").addEventListener("click", function(){
+  var pending = state.expenses.filter(function(e){ return !e.is_paid && matchesExpenseFilter(e, expenseCategoryFilter); });
+  if(!pending.length){ showError("Não há despesas pendentes" + EXPENSE_FILTER_SUFFIX[expenseCategoryFilter] + " neste mês."); return; }
+  if(!window.confirm("Marcar " + pending.length + " despesa(s) pendente(s) como pagas" + EXPENSE_FILTER_SUFFIX[expenseCategoryFilter] + "?")) return;
+
+  pending.forEach(function(e){ e.is_paid = true; });
+  render();
+  Promise.all(pending.map(function(e){ return updateExpense(e.id, { is_paid: true }); })).then(function(results){
+    var failed = results.filter(function(ok){ return !ok; }).length;
+    if(failed) showError(failed + " despesa(s) não foram salvas. Veja o console (F12) para detalhes.");
+  });
+});
+
+// ---- filtro rápido de despesas por categoria ----
+
+Array.prototype.forEach.call(document.querySelectorAll("[data-cat-filter]"), function(btn){
+  btn.addEventListener("click", function(){
+    expenseCategoryFilter = btn.getAttribute("data-cat-filter");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-cat-filter]"), function(b){
+      b.classList.toggle("active", b === btn);
+    });
+    render();
+  });
+});
+
 // ---- formulário: novo aluno ----
 
 var toggleStudent = document.getElementById("toggle-student");
@@ -1161,6 +1440,7 @@ formStudent.addEventListener("submit", function(ev){
   var aluno = document.getElementById("s-aluno").value.trim();
   var resp = document.getElementById("s-resp").value.trim();
   var valor = parseFloat(document.getElementById("s-valor").value);
+  var phone = document.getElementById("s-phone").value.trim();
   var isFixed = document.getElementById("s-fixed").checked;
   if(!aluno || isNaN(valor)) return;
 
@@ -1168,7 +1448,7 @@ formStudent.addEventListener("submit", function(ev){
   // de id temporário: a linha só entra no estado com o id real do banco.
   var submitBtn = formStudent.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
-  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor, month: currentMonth, year: currentYear, userId: currentUserId, isFixed: isFixed }).then(function(row){
+  insertStudent({ studentName: aluno, guardianName: resp, monthlyFee: valor, phone: phone, month: currentMonth, year: currentYear, userId: currentUserId, isFixed: isFixed }).then(function(row){
     submitBtn.disabled = false;
     if(!row){
       showError('Não foi possível salvar o aluno "' + aluno + '". Veja o console (F12) para detalhes.');
@@ -1208,6 +1488,22 @@ document.getElementById("e-cat").addEventListener("input", function(ev){
 });
 document.getElementById("e-installment").addEventListener("change", function(ev){
   eInstallmentCountField.hidden = !ev.target.checked;
+});
+
+// Pílulas de vencimento rápido — "Hoje"/"Amanhã" usam o dia real do
+// calendário; os dias fixos (10/20/30) são só o número escolhido. Sempre no
+// mês/ano ativo do painel, igual ao resto do campo de vencimento.
+Array.prototype.forEach.call(document.querySelectorAll("[data-due-quick]"), function(btn){
+  btn.addEventListener("click", function(){
+    var kind = btn.getAttribute("data-due-quick");
+    var day;
+    if(kind === "today"){ day = new Date().getDate(); }
+    else if(kind === "tomorrow"){ var t = new Date(); t.setDate(t.getDate() + 1); day = t.getDate(); }
+    else { day = parseInt(kind, 10); }
+    var lastDay = new Date(currentYear, currentMonth, 0).getDate();
+    day = Math.min(day, lastDay);
+    document.getElementById("e-due").value = String(day).padStart(2, "0") + "/" + String(currentMonth).padStart(2, "0");
+  });
 });
 
 function resetExpenseForm(){
@@ -1285,7 +1581,7 @@ formExpense.addEventListener("submit", function(ev){
 function monthLabel(){ return MONTH_NAMES[currentMonth - 1] + " · " + currentYear; }
 
 function showLoading(){
-  document.getElementById("students-body").innerHTML = '<tr class="empty-row"><td colspan="5">Carregando alunos…</td></tr>';
+  document.getElementById("students-body").innerHTML = '<tr class="empty-row"><td colspan="6">Carregando alunos…</td></tr>';
   document.getElementById("expenses-body").innerHTML = '<tr class="empty-row"><td colspan="6">Carregando despesas…</td></tr>';
 }
 
@@ -1297,6 +1593,7 @@ async function goToMonth(month, year){
   currentMonth = month;
   currentYear = year;
   document.getElementById("month-label").textContent = monthLabel();
+  document.getElementById("year-view-year").textContent = year;
   todayIso = new Date().toISOString().slice(0, 10);
   showLoading();
 
@@ -1320,6 +1617,50 @@ document.getElementById("month-next").addEventListener("click", function(){
   var m = currentMonth + 1, y = currentYear;
   if(m > 12){ m = 1; y += 1; }
   goToMonth(m, y);
+});
+
+// ---- visão anual ----
+
+var yearViewOverlay = document.getElementById("year-view-overlay");
+
+function openYearView(){
+  document.getElementById("year-view-title").textContent = "Visão anual · " + currentYear;
+  document.getElementById("year-view-body").innerHTML = '<tr class="empty-row"><td colspan="4">Carregando…</td></tr>';
+  yearViewOverlay.hidden = false;
+
+  fetchYearSummary(currentYear, currentUserId).then(function(months){
+    if(!months){
+      document.getElementById("year-view-body").innerHTML = '<tr class="empty-row"><td colspan="4">Não foi possível carregar a visão anual. Veja o console (F12) para detalhes.</td></tr>';
+      return;
+    }
+    document.getElementById("year-view-body").innerHTML = months.map(function(m){
+      var profitClass = m.profit < 0 ? "profit-negative" : "profit-positive";
+      return '<tr>' +
+        '<td>' + MONTH_NAMES[m.month - 1] + '</td>' +
+        '<td class="num">' + brl(m.revenue) + '</td>' +
+        '<td class="num">' + brl(m.expense) + '</td>' +
+        '<td class="num ' + profitClass + '">' + brl(m.profit) + '</td>' +
+        '</tr>';
+    }).join("");
+
+    var totalRevenue = months.reduce(function(a, m){ return a + m.revenue; }, 0);
+    var totalExpense = months.reduce(function(a, m){ return a + m.expense; }, 0);
+    document.getElementById("year-total-revenue").textContent = brl(totalRevenue);
+    document.getElementById("year-total-expense").textContent = brl(totalExpense);
+    var totalProfitEl = document.getElementById("year-total-profit");
+    totalProfitEl.textContent = brl(totalRevenue - totalExpense);
+    totalProfitEl.classList.toggle("profit-negative", totalRevenue - totalExpense < 0);
+    totalProfitEl.classList.toggle("profit-positive", totalRevenue - totalExpense >= 0);
+  });
+}
+
+document.getElementById("open-year-view").addEventListener("click", openYearView);
+document.getElementById("year-view-close").addEventListener("click", function(){ yearViewOverlay.hidden = true; });
+yearViewOverlay.addEventListener("click", function(ev){
+  if(ev.target === yearViewOverlay) yearViewOverlay.hidden = true;
+});
+document.addEventListener("keydown", function(ev){
+  if(ev.key === "Escape" && !yearViewOverlay.hidden) yearViewOverlay.hidden = true;
 });
 
 var syncPill = document.getElementById("sync-pill");

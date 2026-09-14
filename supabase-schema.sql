@@ -169,3 +169,13 @@ drop table if exists public.student_payments;
 -- despesa) e parcelamento (as parcelas geradas são despesas comuns, uma por
 -- mês, sem coluna nova — só a descrição ganha o sufixo "(i/N)").
 alter table public.expenses add column if not exists category_color text;
+
+-- MIGRAÇÃO (rodada 10) — WhatsApp/Pix e reserva de emergência
+alter table public.students add column if not exists phone text;
+alter table public.user_settings add column if not exists pix_key text not null default '';
+alter table public.user_settings add column if not exists emergency_fund numeric(10,2) not null default 0;
+
+-- Preserva a chave Pix já usada nas suas mensagens (troque o UID pelo mesmo
+-- das migrações anteriores). Roda só se a linha já existir — não cria conta:
+update public.user_settings set pix_key = '92984959683'
+where user_id = 'COLE-SEU-UID-AQUI' and (pix_key is null or pix_key = '');
