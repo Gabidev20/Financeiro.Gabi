@@ -170,8 +170,8 @@ export async function insertStudent({ studentName, guardianName, monthlyFee, pho
 }
 
 // Remove um aluno/receita (botão de excluir na linha) — some só deste mês.
-// Uma fixa removida aqui não impede meses futuros de clonarem a ocorrência
-// anterior mais recente que ainda existir.
+// Uma receita não-fixa não deixa rastro nenhum (ver stopFixedStudent para a
+// fixa, que precisa também impedir a clonagem em meses futuros).
 export async function removeStudent(id) {
   if (!isSupabaseEnabled) {
     const state = readLocal();
@@ -185,6 +185,36 @@ export async function removeStudent(id) {
     return true;
   } catch (err) {
     logSupabaseError("removeStudent", { id }, err);
+    return false;
+  }
+}
+
+// Remove uma receita FIXA: apaga a linha deste mês e desliga is_fixed de
+// qualquer outra ocorrência passada do mesmo aluno — sem isso, excluir a
+// fixa de um mês não impedia a clonagem pros meses seguintes, porque uma
+// ocorrência anterior (ex.: do mês retrasado) continuava marcada como fixa e
+// servia de molde. O histórico em si (meses já fechados) não é apagado, só
+// deixa de contar como "fixa" para a clonagem.
+export async function stopFixedStudent(id, studentName, userId) {
+  if (!isSupabaseEnabled) {
+    const state = readLocal();
+    state.students = (state.students || []).filter((s) => s.id !== id);
+    state.students.forEach((s) => {
+      if (s.student_name === studentName && s.user_id === userId) s.is_fixed = false;
+    });
+    writeLocal(state);
+    return true;
+  }
+  try {
+    const { error: delError } = await supabase.from("students").delete().eq("id", id);
+    if (delError) { logSupabaseError("stopFixedStudent:delete", { id }, delError); return false; }
+    const { error: unfixError } = await supabase
+      .from("students").update({ is_fixed: false })
+      .eq("student_name", studentName).eq("user_id", userId).eq("is_fixed", true);
+    if (unfixError) logSupabaseError("stopFixedStudent:unfix", { studentName, userId }, unfixError);
+    return true;
+  } catch (err) {
+    logSupabaseError("stopFixedStudent", { id, studentName, userId }, err);
     return false;
   }
 }
@@ -427,6 +457,35 @@ export async function deleteExpense(id) {
     return true;
   } catch (err) {
     logSupabaseError("deleteExpense", { id }, err);
+    return false;
+  }
+}
+
+// Remove uma despesa FIXA: apaga a linha deste mês e desliga is_fixed de
+// qualquer outra ocorrência passada da mesma descrição — mesmo motivo de
+// stopFixedStudent (ver comentário lá): sem isso, uma conta fixa excluída
+// num mês voltava a ser clonada no mês seguinte a partir de um mês mais
+// antigo que ainda estivesse marcado como fixo.
+export async function stopFixedExpense(id, description, userId) {
+  if (!isSupabaseEnabled) {
+    const state = readLocal();
+    state.expenses = (state.expenses || []).filter((e) => e.id !== id);
+    state.expenses.forEach((e) => {
+      if (e.description === description && e.user_id === userId) e.is_fixed = false;
+    });
+    writeLocal(state);
+    return true;
+  }
+  try {
+    const { error: delError } = await supabase.from("expenses").delete().eq("id", id);
+    if (delError) { logSupabaseError("stopFixedExpense:delete", { id }, delError); return false; }
+    const { error: unfixError } = await supabase
+      .from("expenses").update({ is_fixed: false })
+      .eq("description", description).eq("user_id", userId).eq("is_fixed", true);
+    if (unfixError) logSupabaseError("stopFixedExpense:unfix", { description, userId }, unfixError);
+    return true;
+  } catch (err) {
+    logSupabaseError("stopFixedExpense", { id, description, userId }, err);
     return false;
   }
 }

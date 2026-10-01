@@ -778,17 +778,18 @@
 <script type="module">
 import { isSupabaseEnabled } from "./supabaseClient.js";
 import {
-  updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense,
-  removeStudent, toggleStudentPaid, updateStudent, loadMonthData, subscribeRealtime,
+  updateExpense, togglePaid, insertStudent, insertExpense, deleteExpense, stopFixedExpense,
+  removeStudent, stopFixedStudent, toggleStudentPaid, updateStudent, loadMonthData, subscribeRealtime,
   getOrCreateSettings, updateSettings, insertInstallments, fetchYearSummary
 } from "./persistence.js";
 import { getSession, signIn, signUp, signOut, onAuthChange } from "./auth.js";
 
 var MONTH_NAMES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 var QUICK_CATEGORIES = ["Pix", "Cartão de crédito", "Boleto", "Dinheiro"]; // sugestões — o campo aceita qualquer texto digitado
-var currentMonth = 9;
-var currentYear = 2026;
-var todayIso = new Date().toISOString().slice(0, 10);
+var today = new Date();
+var currentMonth = today.getMonth() + 1;
+var currentYear = today.getFullYear();
+var todayIso = today.toISOString().slice(0, 10);
 var currentUserId = null;
 var currentSettings = null;
 var unsubscribeRealtime = null;
@@ -1337,7 +1338,10 @@ document.getElementById("expenses-body").addEventListener("click", function(ev){
     var removedIndex = state.expenses.indexOf(removed);
     state.expenses = state.expenses.filter(function(e){ return e.id !== id; });
     render();
-    deleteExpense(id).then(function(ok){
+    var removeExpensePromise = removed && removed.is_fixed
+      ? stopFixedExpense(id, removed.description, currentUserId)
+      : deleteExpense(id);
+    removeExpensePromise.then(function(ok){
       if(!ok && removed){
         state.expenses.splice(removedIndex, 0, removed); // devolve a linha — não foi excluída de verdade
         render();
@@ -1407,7 +1411,10 @@ document.getElementById("students-body").addEventListener("click", function(ev){
     state.students = state.students.filter(function(s){ return s.id !== id; });
     state.receitaManual = null;
     render();
-    removeStudent(id).then(function(ok){
+    var removeStudentPromise = removed && removed.is_fixed
+      ? stopFixedStudent(id, removed.student_name, currentUserId)
+      : removeStudent(id);
+    removeStudentPromise.then(function(ok){
       if(!ok && removed){
         state.students.push(removed);
         state.receitaManual = null;
