@@ -481,8 +481,29 @@
     }
     .panel.collapsed .panel-body{ max-height:0; padding-top:0; padding-bottom:0; opacity:0; }
   }
+  .spending-overview-grid{ display:flex; gap:32px; align-items:center; flex-wrap:wrap; }
+  .donut-wrap{ position:relative; width:180px; height:180px; flex:0 0 auto; margin:0 auto; }
+  .donut-chart{ width:100%; height:100%; transform:rotate(-90deg); }
+  .donut-chart circle{ transition:stroke-dasharray .4s ease, stroke-dashoffset .4s ease, stroke .2s ease; }
+  .donut-center{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; gap:2px; pointer-events:none;
+  }
+  .donut-center-value{ font-family:'IBM Plex Mono', monospace; font-weight:700; font-size:16px; color:var(--text); }
+  .donut-center-label{ font-size:10.5px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; }
+  .spending-legend{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:11px; flex:1 1 220px; min-width:200px; }
+  .spending-legend li{ display:flex; align-items:center; gap:10px; font-size:13.5px; }
+  .spending-legend .dot{ width:10px; height:10px; border-radius:50%; flex:0 0 auto; }
+  .spending-legend .cat-name{ flex:1; color:var(--text); font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .spending-legend .cat-pct{ color:var(--text-muted); font-size:12px; width:34px; text-align:right; }
+  .spending-legend .cat-amount{ font-family:'IBM Plex Mono', monospace; font-weight:600; color:var(--text); min-width:92px; text-align:right; }
+  .spending-empty{ color:var(--text-muted); font-size:13.5px; padding:16px 0 4px; text-align:center; }
+  @media (max-width:560px){
+    .spending-overview-grid{ flex-direction:column; }
+  }
   @media (prefers-reduced-motion: reduce){
     .panel-body, .chevron{ transition:none; }
+    .donut-chart circle{ transition:none; }
   }
   @media (prefers-reduced-motion: no-preference){
     .stat-card, .panel{ transition: box-shadow .15s ease; }
@@ -740,6 +761,29 @@
       </div>
     </section>
   </div>
+
+  <section class="panel spending-overview">
+    <div class="panel-head">
+      <h2>Para onde vai o dinheiro</h2>
+      <div class="panel-head-right">
+        <span class="count" id="spending-overview-note">0 categorias</span>
+        <button type="button" class="panel-collapse-btn" data-panel-toggle aria-label="Recolher ou expandir"><svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="spending-overview-grid">
+        <div class="donut-wrap">
+          <svg class="donut-chart" viewBox="0 0 100 100" id="spending-donut"></svg>
+          <div class="donut-center">
+            <span class="donut-center-value" id="spending-donut-total">R$ 0,00</span>
+            <span class="donut-center-label">gasto no mês</span>
+          </div>
+        </div>
+        <ul class="spending-legend" id="spending-legend"></ul>
+      </div>
+      <p class="spending-empty" id="spending-empty" hidden>Nenhuma despesa cadastrada neste mês ainda.</p>
+    </div>
+  </section>
 
   <footer class="note" id="footer-note">Conectando ao Supabase…</footer>
 </div>
@@ -1198,6 +1242,70 @@ function updateTotals(){
 
   var pct = totalDespesas > 0 ? (pago / totalDespesas) * 100 : 0;
   document.getElementById("progress-fill").style.width = pct.toFixed(1) + "%";
+
+  renderSpendingOverview();
+}
+
+// Dashboard "Para onde vai o dinheiro" — agrupa as despesas do mês por
+// categoria (pagas + pendentes, é o compromisso financeiro todo) e desenha
+// um donut SVG com a mesma cor que a categoria já usa nos chips da tabela.
+// Categorias sem cor escolhida pelo usuário recebem uma cor da paleta padrão
+// por posição, pra nunca ficar sem cor nenhuma.
+function renderSpendingOverview(){
+  var total = state.expenses.reduce(function(a,e){ return a + Number(e.amount); }, 0);
+  var noteEl = document.getElementById("spending-overview-note");
+  var emptyEl = document.getElementById("spending-empty");
+  var legendEl = document.getElementById("spending-legend");
+  var svg = document.getElementById("spending-donut");
+
+  document.getElementById("spending-donut-total").textContent = brl(total);
+
+  if(!state.expenses.length || total <= 0){
+    emptyEl.hidden = false;
+    legendEl.innerHTML = "";
+    svg.innerHTML = '<circle cx="50" cy="50" r="40" fill="none" stroke="var(--border)" stroke-width="14"></circle>';
+    noteEl.textContent = "0 categorias";
+    return;
+  }
+  emptyEl.hidden = true;
+
+  var groups = {};
+  var order = [];
+  state.expenses.forEach(function(e){
+    var key = normalizeCategoryText(e.category) || "sem-categoria";
+    if(!groups[key]){
+      groups[key] = { label: e.category || "Sem categoria", amount: 0, color: null };
+      order.push(key);
+    }
+    groups[key].amount += Number(e.amount);
+    if(e.category_color) groups[key].color = e.category_color;
+  });
+
+  var list = order.map(function(key, i){
+    var g = groups[key];
+    if(!g.color) g.color = CATEGORY_COLORS[i % CATEGORY_COLORS.length].hex;
+    return g;
+  }).sort(function(a, b){ return b.amount - a.amount; });
+
+  noteEl.textContent = list.length + (list.length === 1 ? " categoria" : " categorias");
+
+  var r = 40, circumference = 2 * Math.PI * r, offsetAcc = 0;
+  svg.innerHTML = list.map(function(g){
+    var dash = (g.amount / total) * circumference;
+    var circle = '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + g.color + '" stroke-width="14" ' +
+      'stroke-dasharray="' + dash.toFixed(2) + ' ' + (circumference - dash).toFixed(2) + '" ' +
+      'stroke-dashoffset="' + (-offsetAcc).toFixed(2) + '"></circle>';
+    offsetAcc += dash;
+    return circle;
+  }).join("");
+
+  legendEl.innerHTML = list.map(function(g){
+    var pct2 = (g.amount / total) * 100;
+    return '<li><span class="dot" style="background:' + g.color + '"></span>' +
+      '<span class="cat-name">' + escapeHtml(g.label) + '</span>' +
+      '<span class="cat-pct">' + pct2.toFixed(0) + '%</span>' +
+      '<span class="cat-amount">' + brl(g.amount) + '</span></li>';
+  }).join("");
 }
 
 // ---- eventos: despesas ----
